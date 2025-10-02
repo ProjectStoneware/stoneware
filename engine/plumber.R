@@ -96,3 +96,44 @@ function(req, name="my_data"){
   assign(name, df, envir=STONEWARE_DATA)
   list(name=name, rows=nrow(df), cols=ncol(df), columns=unname(colnames(df)))
 }
+
+# -------- Diagnostics: residuals vs fitted and QQ plot --------
+#* @get /analyze/diagnostics
+#* @param data Dataset name
+#* @param formula Model formula string
+function(data="mtcars", formula="mpg~wt") {
+  df <- if (exists(data, envir=STONEWARE_DATA, inherits=FALSE)) {
+    get(data, envir=STONEWARE_DATA, inherits=FALSE)
+  } else {
+    switch(data, "mtcars"=mtcars, stop("Dataset not found. Upload with /data/upload_text or use data=mtcars"))
+  }
+  fit <- lm(as.formula(formula), data=df)
+
+  to_data_url <- function(expr) {
+    tf <- tempfile(fileext = ".png")
+    png(tf, width = 800, height = 600, res = 120)
+    on.exit(dev.off(), add=TRUE)
+    eval.parent(substitute(expr))
+    dev.off()
+    enc <- base64enc::base64encode(tf)
+    paste0("data:image/png;base64,", enc)
+  }
+
+  res_fit_png <- to_data_url({
+    plot(fitted(fit), resid(fit),
+         xlab = "Fitted values", ylab = "Residuals",
+         main = "Residuals vs Fitted", pch = 19, col = "#3366AA88")
+    abline(h = 0, lty = 2, col = "gray50")
+  })
+
+  qq_png <- to_data_url({
+    qqnorm(resid(fit), main = "Normal Q-Q (Residuals)", pch = 19, col = "#3366AA88")
+    qqline(resid(fit), col = "gray50", lty = 2, lwd = 2)
+  })
+
+  list(
+    r_code = sprintf("fit <- lm(%s, data = %s)", formula, data),
+    residuals_vs_fitted = res_fit_png,
+    qq_plot = qq_png
+  )
+}

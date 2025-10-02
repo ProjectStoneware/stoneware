@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Stoneware</title>
+  <title>Stoneware MVP Spike</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; margin: 24px; }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -18,7 +18,8 @@
     .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #eee; background: #f8f8f8; font-size: 12px; }
     .rbox { background: #0f0f0f; color: #f8f8f2; padding: 12px; border-radius: 8px; overflow-x: auto; }
     .ok { color: #006400; } .warn { color: #8B0000; }
-    @media (max-width: 900px) { .stack { grid-template-columns: 1fr;} }
+    img.plot { max-width: 100%; border: 1px solid #eee; border-radius: 8px; }
+    @media (max-width: 900px) { .stack { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -46,6 +47,7 @@
       </select>
       <input id="formula" value="mpg~wt" />
       <button id="analyze">Analyze</button>
+      <button id="diagnostics">Diagnostics</button>
     </div>
   </div>
 
@@ -89,8 +91,22 @@
     </table>
   </div>
 
+  <div class="card" id="diagCard" style="display:none;">
+    <h3 style="margin-top:0;">Diagnostics</h3>
+    <div class="row">
+      <div>
+        <div class="muted">Residuals vs Fitted</div>
+        <img id="imgResFit" class="plot" />
+      </div>
+      <div>
+        <div class="muted">Normal Q-Q</div>
+        <img id="imgQQ" class="plot" />
+      </div>
+    </div>
+  </div>
+
 <script>
-const fmtNum = (x) => { if (x==null||Number.isNaN(x)) return "–"; const ax=Math.abs(x); if (ax>=1000||(ax>0&&ax<0.001)) return Number(x).toExponential(3); return Number(x).toFixed(4); };
+const fmtNum = (x) => { if (x==null||Number.isNaN(x)) return "–"; const ax=Math.abs(x); if (ax>=1000||(ax>0&&x<0.001)) return Number(x).toExponential(3); return Number(x).toFixed(4); };
 const fmtP = (p) => (p<0.001 ? "<0.001" : Number(p).toExponential(2).replace("e-0","e-"));
 const star = (p) => p<0.001 ? "***" : p<0.01 ? "**" : p<0.05 ? "*" : "";
 
@@ -100,6 +116,9 @@ const panelJson = document.getElementById('panel-json');
 const coefBody = document.getElementById('coefBody');
 const summary = document.getElementById('summary');
 const rcode = document.getElementById('rcode');
+const diagCard = document.getElementById('diagCard');
+const imgResFit = document.getElementById('imgResFit');
+const imgQQ = document.getElementById('imgQQ');
 
 function setStatus(t, ok=true){ statusEl.textContent = t; statusEl.className = ok ? "pill ok" : "pill warn"; }
 
@@ -127,12 +146,7 @@ document.getElementById('analyze').onclick = async () => {
     const ms = d.model_summary;
     const n = ms.n?.[0], r2 = ms.r2?.[0], adj = ms.adj_r2?.[0], sig = ms.sigma?.[0];
     const fval = ms.f_stat?.value?.[0], df1 = ms.f_stat?.df1?.[0], df2 = ms.f_stat?.df2?.[0], p = ms.f_stat?.p?.[0];
-    summary.textContent = `n=${n}, R²=${fmtNum(r2)} (adj. ${fmtNum(adj)}), σ=${fmtNum(sig)}; F(${df1}, ${df2})=${fmtNum(fval)}, p=${fmtP(p)}`;
-    document.getElementById('n').textContent = `n = ${n}`;
-    document.getElementById('r2').textContent = `R² = ${fmtNum(r2)}`;
-    document.getElementById('adjr2').textContent = `Adj R² = ${fmtNum(adj)}`;
-    document.getElementById('sigma').textContent = `σ = ${fmtNum(sig)}`;
-    document.getElementById('fstat').textContent = `F(${df1},${df2})=${fmtNum(fval)}, p=${fmtP(p)}`;
+    summary.textContent = `n=${n}, R²=${Number(r2).toFixed(4)} (adj. ${Number(adj).toFixed(4)}), σ=${fmtNum(sig)}; F(${df1}, ${df2})=${fmtNum(fval)}, p=${fmtP(p)}`;
 
     coefBody.innerHTML = "";
     (ms.coefficients || []).forEach(c => {
@@ -157,6 +171,24 @@ document.getElementById('analyze').onclick = async () => {
   }
 };
 
+document.getElementById('diagnostics').onclick = async () => {
+  const f = document.getElementById('formula').value || 'mpg~wt';
+  const dataName = document.getElementById('dataset').value || 'mtcars';
+  try {
+    setStatus("diagnostics…");
+    const d = await window.stoneware.fetchDiagnostics(f, dataName);
+    panelJson.style.display='block';
+    out.textContent = JSON.stringify({ r_code: d.r_code }, null, 2);
+    imgResFit.src = d.residuals_vs_fitted;
+    imgQQ.src = d.qq_plot;
+    diagCard.style.display = 'block';
+    setStatus("ok");
+  } catch(e) {
+    setStatus("diagnostics failed", false);
+    out.textContent = "Error: " + e;
+  }
+};
+
 document.getElementById('upload').onclick = async () => {
   const file = document.getElementById('csv').files[0];
   const name = document.getElementById('dataname').value || 'my_data';
@@ -164,13 +196,24 @@ document.getElementById('upload').onclick = async () => {
   if (!file) { upmsg.textContent = "Choose a CSV first."; return; }
   upmsg.textContent = "Uploading…";
   try {
-    const res = await window.stoneware.uploadCSV(file, name);
-    upmsg.textContent = `Uploaded "${res.name}" (${res.rows} rows, ${res.cols} cols)`;
-    const ds = document.getElementById('dataset');
-    if (![...ds.options].some(o => o.value === res.name)) {
-      const opt = document.createElement('option'); opt.value = res.name; opt.text = `${res.name} (uploaded)`; ds.appendChild(opt);
+    // Text-based upload path (robust on your setup)
+    const text = await file.text();
+    const res = await fetch(`http://127.0.0.1:8000/data/upload_text?name=${encodeURIComponent(name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv' },
+      body: text
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt}`);
     }
-    ds.value = res.name;
+    const data = await res.json();
+    upmsg.textContent = `Uploaded "${data.name}" (${data.rows} rows, ${data.cols} cols)`;
+    const ds = document.getElementById('dataset');
+    if (![...ds.options].some(o => o.value === data.name)) {
+      const opt = document.createElement('option'); opt.value = data.name; opt.text = `${data.name} (uploaded)`; ds.appendChild(opt);
+    }
+    ds.value = data.name;
   } catch (e) {
     upmsg.textContent = "Upload failed: " + e.message;
   }
