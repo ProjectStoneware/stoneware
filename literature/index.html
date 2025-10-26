@@ -11,19 +11,28 @@
 </head>
 
 <body class="theme-literature">
-  <!-- Header -->
-  <header class="container" style="padding-bottom:0">
-    <nav class="row" style="display:flex;align-items:center;gap:12px">
-      <a class="btn" href="../">← Home</a>
-      <h1 class="title" style="margin:8px 0 0">Literature</h1>
+  <!-- Header (title + quill + Home) -->
+  <header class="container site-header">
+    <nav class="row titlebar">
+      <img class="title-emblem" src="../assets/quill-pen.png" alt="Quill pen" />
+      <h1 class="title">Literature</h1>
+      <a class="btn backhome" href="../">← Home</a>
+    </nav>
+
+    <!-- Pinned shelves (sticky) -->
+    <nav id="shelfTabs" class="tabs tabs--sticky" role="tablist" aria-label="Shelves">
+      <button class="tab is-active" role="tab" aria-selected="true" data-shelf="toRead"  id="tab-toRead">To Read</button>
+      <button class="tab" role="tab" aria-selected="false" data-shelf="reading" id="tab-reading">Reading</button>
+      <button class="tab" role="tab" aria-selected="false" data-shelf="finished" id="tab-finished">Finished</button>
+      <button class="tab" role="tab" aria-selected="false" data-shelf="abandoned" id="tab-abandoned">Abandoned</button>
     </nav>
   </header>
 
   <!-- Main content -->
-  <main class="container">
+  <main class="container main-content">
 
-    <!-- Search (does not switch shelves) -->
-    <section class="card" aria-labelledby="searchHeading" style="margin-bottom:16px">
+    <!-- Search (independent of shelves) -->
+    <section class="card" aria-labelledby="searchHeading">
       <h2 id="searchHeading" class="visually-hidden">Search</h2>
       <form id="searchForm" class="row" role="search">
         <input id="q" class="input" type="search" placeholder="Search title, author, or ISBN…" aria-label="Search books" style="flex:1;min-width:240px" />
@@ -31,7 +40,7 @@
         <span id="status" class="sub" style="margin-left:8px" aria-live="polite"></span>
       </form>
 
-      <!-- Search results live here; independent of shelves -->
+      <!-- Search results live here; entirely separate from shelves -->
       <div id="results" style="margin-top:12px">
         <div id="resultsGrid" class="books-grid" data-mode="search" aria-live="polite"></div>
       </div>
@@ -40,14 +49,6 @@
     <!-- Your Shelves (always your saved books) -->
     <section class="card" aria-labelledby="shelvesHeading">
       <h2 id="shelvesHeading" class="visually-hidden">Your Shelves</h2>
-
-      <div id="shelfTabs" class="tabs" role="tablist" aria-label="Shelves">
-        <button class="tab is-active" role="tab" aria-selected="true" data-shelf="toRead"  id="tab-toRead">To Read</button>
-        <button class="tab" role="tab" aria-selected="false" data-shelf="reading" id="tab-reading">Reading</button>
-        <button class="tab" role="tab" aria-selected="false" data-shelf="finished" id="tab-finished">Finished</button>
-        <button class="tab" role="tab" aria-selected="false" data-shelf="abandoned" id="tab-abandoned">Abandoned</button>
-      </div>
-
       <!-- Saved items render here; separate from search results -->
       <div id="shelfGrid" class="books-grid" data-mode="shelf" aria-live="polite"></div>
     </section>
@@ -58,7 +59,7 @@
     <small>© <span id="y"></span> ProjectStoneware · Literature</small>
   </footer>
 
-  <!-- Details modal (shows full summary only) -->
+  <!-- Details modal (shows full summary; no external link) -->
   <div id="modal" class="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header>
@@ -75,35 +76,13 @@
     </div>
   </div>
 
-  <!-- Rating prompt (appears when rating from search results) -->
-  <div id="prompt" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="promptTitle">
-      <header>
-        <h3 id="promptTitle">Shelve this book?</h3>
-        <button class="close" id="promptClose" aria-label="Close">✕</button>
-      </header>
-      <div class="body" style="display:grid;gap:10px">
-        <p class="sub" style="margin:0">Choose a shelf or keep the rating without shelving.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn small" data-shelve="toRead">To Read</button>
-          <button class="btn small" data-shelve="reading">Reading</button>
-          <button class="btn small" data-shelve="finished">Finished</button>
-          <button class="btn small" data-shelve="abandoned">Abandoned</button>
-          <button class="btn small ghost" data-shelve="none">Don’t shelve</button>
-        </div>
-      </div>
-      <footer>
-        <a class="close btn small" id="promptCancel">Cancel</a>
-      </footer>
-    </div>
-  </div>
-
   <!-- Tiny inline script just for year stamp -->
   <script>
-    document.getElementById('y').textContent = new Date().getFullYear();
+    const y = document.getElementById('y');
+    if (y) y.textContent = new Date().getFullYear();
   </script>
 
-  <!-- Main logic for search/shelves/ratings/modal (will target #resultsGrid and #shelfGrid) -->
+  <!-- Main logic for search/shelves/ratings/modal -->
   <script defer src="books.js"></script>
 
   <noscript>
@@ -111,7 +90,7 @@
     <div class="container"><p class="sub">Enable JavaScript to use search, shelves, and ratings.</p></div>
   </noscript>
 
-  <!-- Utility: visually hidden class for headings we don’t want visible -->
+  <!-- Utility: visually hidden class for headings not shown visually -->
   <style>
     .visually-hidden{
       position:absolute!important; width:1px!important; height:1px!important;
