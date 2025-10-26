@@ -1,222 +1,184 @@
-/* Stoneware · Literature
-   - Search Google Books
-   - Shelves: toRead, reading, finished, abandoned
-   - Quarter-star ratings (0.25 steps)
-   - Local persistence via localStorage
-*/
+/* ============================================================================
+   Stoneware · Literature
+   Personal Library Tracker
+   - Google Books Search
+   - Shelves (toRead, reading, finished, abandoned)
+   - Quarter-Star Ratings (0.25 increments)
+   - Click for Full Summary Modal
+   - Local Storage Persistence
+============================================================================ */
 
-const SHELVES = {
-  toRead: "To Read",
-  reading: "Reading",
-  finished: "Finished",
-  abandoned: "Abandoned",
-};
+const API = "https://www.googleapis.com/books/v1/volumes?q=";
+const shelves = ["toRead", "reading", "finished", "abandoned"];
+let currentShelf = "toRead";
 
-const STATE_KEY = "stoneware.books.v1";
-let state = loadState();
+// DOM Elements
+const form = document.getElementById("searchForm");
+const input = document.getElementById("q");
+const statusEl = document.getElementById("status");
+const grid = document.querySelector(".books-grid");
+const tabs = document.querySelectorAll(".tab");
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STATE_KEY);
-    if (!raw) return { books: {}, order: [] };
-    const parsed = JSON.parse(raw);
-    return { books: parsed.books || {}, order: parsed.order || [] };
-  } catch (_) {
-    return { books: {}, order: [] };
+// Modal Elements
+const modal = document.getElementById("modal");
+const modalTitle = document.getElementById("modalTitle");
+const modalByline = document.getElementById("modalByline");
+const modalBody = document.getElementById("modalBody");
+const modalInfo = document.getElementById("modalInfo");
+const modalClose = document.getElementById("modalClose");
+const modalCancel = document.getElementById("modalCancel");
+
+// Local Storage Helpers
+function loadShelf(shelf) {
+  return JSON.parse(localStorage.getItem(`books_${shelf}`) || "[]");
+}
+function saveShelf(shelf, data) {
+  localStorage.setItem(`books_${shelf}`, JSON.stringify(data));
+}
+
+// Modal Controls
+function openModal(book) {
+  modalTitle.textContent = book.title || "Untitled";
+  modalByline.textContent = book.authors ? book.authors.join(", ") : "";
+  modalBody.innerHTML = book.description
+    ? `<p>${book.description}</p>`
+    : "<p><em>No summary available.</em></p>";
+  modalInfo.href = book.infoLink || "#";
+  modal.setAttribute("aria-hidden", "false");
+  modal.classList.add("show");
+}
+function closeModal() {
+  modal.setAttribute("aria-hidden", "true");
+  modal.classList.remove("show");
+}
+modalClose.addEventListener("click", closeModal);
+modalCancel.addEventListener("click", closeModal);
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) closeModal();
+});
+
+// Quarter-Star Rating
+function renderStars(rating) {
+  const stars = [];
+  for (let i = 1; i <= 5; i++) {
+    const diff = rating - i + 1;
+    if (diff >= 1) stars.push("★");
+    else if (diff >= 0.75) stars.push("¾");
+    else if (diff >= 0.5) stars.push("½");
+    else if (diff >= 0.25) stars.push("¼");
+    else stars.push("☆");
   }
-}
-function saveState() { localStorage.setItem(STATE_KEY, JSON.stringify(state)); }
-function ensureOrder(id){ if (!state.order.includes(id)) state.order.unshift(id); }
-
-function upsertBook(b) {
-  state.books[b.id] = { ...(state.books[b.id] || {}), ...b };
-  ensureOrder(b.id);
-  saveState();
-}
-function setShelf(id, shelf) {
-  if (!SHELVES[shelf] || !state.books[id]) return;
-  state.books[id].shelf = shelf;
-  saveState();
-  renderActive();
-}
-function setRating(id, value) {
-  if (!state.books[id]) return;
-  state.books[id].rating = value;
-  saveState();
-  const out = document.querySelector(`[data-rating-out="${id}"]`);
-  if (out) out.textContent = value.toFixed(2).replace(/\.00$/, "");
-}
-function removeBook(id) {
-  delete state.books[id];
-  state.order = state.order.filter(x => x !== id);
-  saveState();
-  renderActive();
+  return stars.join("");
 }
 
-// ---- Google Books search ----
-async function searchBooks(q) {
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Search failed");
-  const data = await res.json();
-  return (data.items || []).map(item => normalizeVolume(item));
-}
-function normalizeVolume(item) {
-  const v = item.volumeInfo || {};
-  const img = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || "";
-  return {
-    id: item.id,
-    title: v.title || "Untitled",
-    authors: (v.authors && v.authors.join(", ")) || "Unknown",
-    description: v.description || "",
-    thumbnail: img.replace("http://", "https://"),
-    rating: state.books[item.id]?.rating || 0,
-    shelf: state.books[item.id]?.shelf || "toRead",
-    source: "googleBooks",
-  };
-}
-
-// ---- rendering ----
-const el = {
-  grid:   document.querySelector(".books-grid"),
-  tabs:   document.querySelector(".tabs"),
-  form:   document.querySelector("#searchForm"),
-  q:      document.querySelector("#q"),
-  status: document.querySelector("#status"),
-};
-
-let activeShelf = "toRead";
-
-function renderActive(){ renderShelf(activeShelf); }
-
-function renderShelf(shelf) {
-  activeShelf = shelf;
-  document.querySelectorAll(".tab").forEach(b => {
-    b.classList.toggle("is-active", b.dataset.shelf === shelf);
-    b.setAttribute("aria-selected", b.dataset.shelf === shelf ? "true" : "false");
-  });
-
-  const books = state.order.map(id => state.books[id]).filter(b => b && b.shelf === shelf);
-
+// Render Books
+function renderBooks(books, fromSearch = false) {
+  grid.innerHTML = "";
   if (!books.length) {
-    el.grid.innerHTML = `<div class="sub" style="opacity:.8;grid-column:1/-1">No books on the “${SHELVES[shelf]}” shelf yet.</div>`;
+    grid.innerHTML = `<p class="sub" style="padding:20px;text-align:center">No books found.</p>`;
     return;
   }
 
-  el.grid.innerHTML = books.map(renderBookCard).join("");
-  wireCardEvents();
-}
+  books.forEach((book) => {
+    const article = document.createElement("article");
+    article.className = "book";
+    const ratingDisplay = renderStars(book.rating || 0);
 
-function renderBookCard(b) {
-  const bg = b.thumbnail ? `style="background-image:url('${b.thumbnail}');background-size:cover;background-position:center"` : "";
-  const rating = Number(b.rating || 0);
-  return `
-  <article class="book" data-id="${b.id}">
-    <div class="cover" ${bg}></div>
-    <div class="meta">
-      <h3 class="book-title">${escapeHTML(b.title)}</h3>
-      <div class="book-author">${escapeHTML(b.authors)}</div>
-      <div class="badges"><span class="badge">${SHELVES[b.shelf]}</span></div>
-      <div class="rating">
-        <label>Rating:
-          <input type="range" min="0" max="5" step="0.25" value="${rating}" data-rating="${b.id}">
-          <output data-rating-out="${b.id}">${rating.toFixed(2).replace(/\.00$/, "")}</output> ★
-        </label>
+    article.innerHTML = `
+      <div class="meta">
+        <h2 class="book-title">${book.title || "Untitled"}</h2>
+        <div class="book-author">${book.authors ? book.authors.join(", ") : ""}</div>
+        ${book.description ? `<p class="notes">${book.description.slice(0, 200)}${book.description.length > 200 ? "…" : ""}</p>` : ""}
+        <div class="badges">
+          <div class="badge">${book.rating ? `${book.rating.toFixed(2)} ★ ${ratingDisplay}` : "No rating"}</div>
+          ${book.status ? `<div class="badge">${book.status}</div>` : ""}
+        </div>
+        <div class="actions">
+          ${
+            fromSearch
+              ? `<button class="btn small" data-add>Add</button>`
+              : `<button class="btn small ghost" data-remove>Remove</button>`
+          }
+          <button class="btn small" data-view>View</button>
+        </div>
       </div>
-      <div class="actions">
-        ${shelfSwitcher(b.id, b.shelf)}
-        <button class="btn small ghost" data-edit="${b.id}">Edit</button>
-        <button class="btn small ghost" data-remove="${b.id}">Remove</button>
-      </div>
-    </div>
-  </article>`;
-}
-function shelfSwitcher(id, shelf) {
-  const options = Object.entries(SHELVES)
-    .map(([k, v]) => `<option value="${k}" ${k===shelf?"selected":""}>${v}</option>`)
-    .join("");
-  return `<label class="btn small ghost">Move to
-            <select data-move="${id}" style="margin-left:6px">${options}</select>
-          </label>`;
-}
-function wireCardEvents() {
-  document.querySelectorAll('[data-rating]').forEach(inp => {
-    inp.addEventListener('input', e => {
-      const id = e.target.dataset.rating;
-      const val = Math.round(parseFloat(e.target.value) * 4) / 4;
-      setRating(id, val);
-    });
-  });
-  document.querySelectorAll('[data-move]').forEach(sel => {
-    sel.addEventListener('change', e => setShelf(e.target.dataset.move, e.target.value));
-  });
-  document.querySelectorAll('[data-remove]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      const id = e.target.dataset.remove;
-      if (confirm("Remove this book from your library?")) removeBook(id);
-    });
-  });
-  document.querySelectorAll('[data-edit]').forEach(btn => {
-    btn.addEventListener('click', () => alert("Notes & review editor coming soon."));
+    `;
+
+    // Button actions
+    const addBtn = article.querySelector("[data-add]");
+    const viewBtn = article.querySelector("[data-view]");
+    const removeBtn = article.querySelector("[data-remove]");
+
+    if (addBtn)
+      addBtn.addEventListener("click", () => {
+        const shelfData = loadShelf(currentShelf);
+        if (!shelfData.some((b) => b.id === book.id)) {
+          shelfData.push({ ...book, status: currentShelf });
+          saveShelf(currentShelf, shelfData);
+          renderActive();
+        }
+      });
+
+    if (removeBtn)
+      removeBtn.addEventListener("click", () => {
+        let shelfData = loadShelf(currentShelf);
+        shelfData = shelfData.filter((b) => b.id !== book.id);
+        saveShelf(currentShelf, shelfData);
+        renderActive();
+      });
+
+    if (viewBtn) viewBtn.addEventListener("click", () => openModal(book));
+
+    grid.appendChild(article);
   });
 }
 
-// ---- search flow ----
-el.form.addEventListener("submit", async (e) => {
+// Active Shelf Renderer
+function renderActive() {
+  const books = loadShelf(currentShelf);
+  renderBooks(books, false);
+}
+
+// Tab Controls
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    tabs.forEach((t) => t.classList.remove("is-active"));
+    tab.classList.add("is-active");
+    currentShelf = tab.dataset.shelf;
+    renderActive();
+  });
+});
+
+// Search
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const q = el.q.value.trim();
+  const q = input.value.trim();
   if (!q) return;
-  el.status.textContent = "Searching...";
+  statusEl.textContent = "Searching…";
+
   try {
-    const results = await searchBooks(q);
-    el.status.textContent = results.length ? "" : "No results.";
-    el.grid.innerHTML = results.map(renderSearchCard).join("");
-    wireSearchEvents(results);
-    document.querySelectorAll(".tab").forEach(b => b.classList.remove("is-active"));
-  } catch {
-    el.status.textContent = "Search failed. Try again.";
+    const res = await fetch(API + encodeURIComponent(q));
+    const data = await res.json();
+    const items = data.items || [];
+
+    const books = items.map((item) => {
+      const v = item.volumeInfo;
+      return {
+        id: item.id,
+        title: v.title,
+        authors: v.authors,
+        description: v.description || "",
+        infoLink: v.infoLink,
+      };
+    });
+
+    statusEl.textContent = `${books.length} found`;
+    renderBooks(books, true);
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Error fetching results";
   }
 });
 
-function renderSearchCard(b) {
-  const bg = b.thumbnail ? `style="background-image:url('${b.thumbnail}');background-size:cover;background-position:center"` : "";
-  return `
-  <article class="book search" data-id="${b.id}">
-    <div class="cover" ${bg}></div>
-    <div class="meta">
-      <h3 class="book-title">${escapeHTML(b.title)}</h3>
-      <div class="book-author">${escapeHTML(b.authors)}</div>
-      <p class="notes">${escapeHTML(truncate(b.description, 220))}</p>
-      <div class="actions">
-        <label class="btn small">Add to
-          <select data-add="${b.id}" style="margin-left:6px">
-            ${Object.entries(SHELVES).map(([k,v]) => `<option value="${k}">${v}</option>`).join("")}
-          </select>
-        </label>
-      </div>
-    </div>
-  </article>`;
-}
-function wireSearchEvents(results) {
-  const byId = Object.fromEntries(results.map(b => [b.id, b]));
-  document.querySelectorAll('[data-add]').forEach(sel => {
-    sel.addEventListener('change', e => {
-      const id = e.target.dataset.add;
-      const shelf = e.target.value;
-      upsertBook({ ...byId[id], shelf });
-      renderShelf(shelf);
-    });
-  });
-}
-
-// ---- utilities ----
-function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function truncate(s, n){ s=s||""; return s.length>n ? s.slice(0,n-1)+"…" : s; }
-
-// ---- tab navigation ----
-document.querySelectorAll(".tab").forEach(btn => {
-  btn.addEventListener("click", () => renderShelf(btn.dataset.shelf));
-});
-
-// initial render
+// Initial Load
 renderActive();
