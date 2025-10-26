@@ -1,9 +1,11 @@
 /* ============================================================================
-   Stoneware · Literature (Shelf-first UX)
-   - Tabs show YOUR saved shelves only (no searching)
-   - Search shows results with a single “Add to …” dropdown
-   - Thumbnails, Details modal, quarter-step rating for saved items
-   - LocalStorage persistence per shelf
+   Stoneware · Literature (Details fixed + Community ratings)
+   - Tabs show your shelves only
+   - Search with single “Add to …” dropdown
+   - Details modal reliably opens
+   - Community average rating (Google Books: averageRating + ratingsCount)
+   - Quarter-step personal rating for saved items
+   - LocalStorage per shelf
 ============================================================================ */
 
 (function () {
@@ -17,7 +19,7 @@
   const $  = (s, r=document)=>r.querySelector(s);
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const safeJSON = (s, fb)=>{ try { return JSON.parse(s); } catch { return fb; } };
-  const esc = s => (s||"").replace(/[&<>"]/g, m=>({ "&":"&amp;","<":"&lt;"," >":"&gt;","\"":"&quot;" }[m] || m));
+  const esc = s => (s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const clampQuarter = v => Math.round(Number(v||0)*4)/4;
 
   const load = shelf => safeJSON(localStorage.getItem(`books_${shelf}`), []);
@@ -25,6 +27,12 @@
 
   const shelfOptions = (selected="toRead") =>
     SHELVES.map(k => `<option value="${k}" ${k===selected?"selected":""}>${LABEL[k]}</option>`).join("");
+
+  const fmtAvg = (r, c) => {
+    if (!r) return "No community rating";
+    const count = c ? ` (${c.toLocaleString()})` : "";
+    return `${Number(r).toFixed(2)} ★${count}`;
+  };
 
   // ---------- search ----------
   async function searchBooks(q) {
@@ -40,7 +48,9 @@
         authors: v.authors || [],
         description: v.description || "",
         infoLink: v.infoLink || "",
-        thumbnail: thumb
+        thumbnail: thumb,
+        avg: v.averageRating || 0,
+        count: v.ratingsCount || 0,
       };
     });
   }
@@ -76,6 +86,7 @@
 
           <div class="badges">
             <div class="badge">${LABEL[shelf]}</div>
+            <div class="badge">${fmtAvg(b.avg, b.count)}</div>
             <div class="badge"><output data-out>${rating ? rating.toFixed(2).replace(/\.00$/,""): "No rating"}</output> ★</div>
           </div>
 
@@ -111,7 +122,7 @@
         if (!SHELVES.includes(dest) || dest===shelf) return;
         const from = load(shelf).filter(x => x.id !== b.id);
         const to   = load(dest);
-        to.unshift({ ...b, rating: clampQuarter(b.rating||0) });
+        to.unshift({ ...b, rating: clampQuarter(b.rating||0), status: dest });
         save(shelf, from);
         save(dest, to);
         renderShelf(grid, dest);
@@ -133,7 +144,7 @@
     });
   }
 
-  // ---------- render: search results (with single “Add to …” dropdown) ----------
+  // ---------- render: search results (single “Add to …” dropdown) ----------
   function renderSearch(grid, books) {
     grid.innerHTML = "";
     if (!books.length) {
@@ -150,7 +161,10 @@
           <h3 class="book-title">${esc(b.title)}</h3>
           <div class="book-author">${esc(b.authors.join(", "))}</div>
           ${b.description ? `<p class="notes">${esc(b.description.substring(0,260))}${b.description.length>260?"…":""}</p>` : ""}
-          <div class="badges"><div class="badge">Search result</div></div>
+          <div class="badges">
+            <div class="badge">Search result</div>
+            <div class="badge">${fmtAvg(b.avg, b.count)}</div>
+          </div>
 
           <div class="actions">
             <label class="btn small">Add to
@@ -180,21 +194,39 @@
     });
   }
 
-  // ---------- modal ----------
+  // ---------- modal (robust) ----------
   function openModal(b) {
     const m = $("#modal"); if (!m) return;
-    $("#modalTitle").textContent = b.title || "Untitled";
-    $("#modalByline").textContent = (b.authors||[]).join(", ");
-    $("#modalBody").innerHTML = b.description
+    const title  = $("#modalTitle");
+    const byline = $("#modalByline");
+    const body   = $("#modalBody");
+    const info   = $("#modalInfo");
+
+    if (title)  title.textContent = b.title || "Untitled";
+    if (byline) byline.textContent = (b.authors||[]).join(", ");
+
+    const community = fmtAvg(b.avg, b.count);
+    const summary = b.description
       ? `<p>${esc(b.description).replace(/\n{2,}/g,"<br><br>")}</p>`
       : `<p><em>No summary available.</em></p>`;
-    if (b.infoLink) { $("#modalInfo").href = b.infoLink; $("#modalInfo").style.display=""; }
-    else { $("#modalInfo").removeAttribute("href"); $("#modalInfo").style.display="none"; }
+    if (body) body.innerHTML = `<p style="color:#b3a79b;margin:0 0 10px">${community}</p>${summary}`;
 
-    m.classList.add("show"); m.setAttribute("aria-hidden","false");
+    if (info) {
+      if (b.infoLink) { info.href = b.infoLink; info.style.display = ""; }
+      else { info.removeAttribute("href"); info.style.display = "none"; }
+    }
+
+    m.classList.add("show");
+    m.setAttribute("aria-hidden","false");
+
     const close = ()=>{ m.classList.remove("show"); m.setAttribute("aria-hidden","true"); };
-    $("#modalClose").onclick = close;
-    $("#modalCancel").onclick = close;
+    const closeBtn  = $("#modalClose");
+    const cancelBtn = $("#modalCancel");
+
+    // ensure previous handlers don't stack
+    closeBtn && (closeBtn.onclick = close);
+    cancelBtn && (cancelBtn.onclick = close);
+
     m.addEventListener("click", e=>{ if (e.target===m) close(); }, { once:true });
     document.addEventListener("keydown", e=>{ if (e.key==="Escape") close(); }, { once:true });
   }
