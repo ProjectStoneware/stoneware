@@ -1,124 +1,83 @@
-:root {
-  --bg: #0b0c10;
-  --ink: #e6edf3;
-  --muted: #98a2b3;
-  --card: #12141a;
-  --line: #1e222b;
-  --radius: 16px;
-  --accent: #4cc9f0;
+/* =========================
+   Responsive layout helpers
+   ========================= */
+
+/* Base: tighten container at very small widths */
+@media (max-width: 480px) {
+  .container { padding: 16px; }
+  .title { font-size: clamp(22px, 7vw, 36px); }
+  .sub { font-size: 0.95rem; }
+  .btn { padding: 14px 16px; }
+  .card { padding: 16px; }
 }
 
-* {
-  box-sizing: border-box;
+/* Home tiles: ensure good fit on phones & tablets */
+@media (max-width: 900px) {
+  .tiles {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }
+  .tile { padding: 18px; }
+  .tile h2 { font-size: 1.15rem; }
 }
 
-html, body {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font: 16px/1.6 system-ui, -apple-system, Segoe UI, Inter, Roboto, sans-serif;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.container {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 28px;
-}
-
-.grid {
-  display: grid;
-  gap: 16px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 16px 18px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, #12141a, #0f1218);
-  color: var(--ink);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-}
-
-.btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  border-color: #2a2f3a;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 20px;
-}
-
-.center {
-  display: grid;
-  place-items: center;
-  min-height: 70vh;
-}
-
-.title {
-  font-size: clamp(28px, 5vw, 44px);
-  margin: 0 0 6px;
-}
-
-.sub {
-  color: var(--muted);
-  margin: 0 0 24px;
-}
-
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-}
-
-.tile {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 22px;
+/* Utility rows that use inline flex on subpages (forms, navs) */
+.row, form.row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  cursor: pointer;
-  background: linear-gradient(180deg, #12141a, #0e1116);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.tile:hover {
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-  transform: translateY(-2px);
+/* Inputs/buttons should stretch nicely on narrow screens */
+@media (max-width: 700px) {
+  .row > * { flex: 1 1 100%; }         /* stack controls */
+  .row .btn { width: 100%; }           /* full-width buttons on mobile */
 }
 
-.badge {
-  font-size: 0.85em;
-  color: var(--muted);
+/* Grids for items (books/films/games placeholders use these class names) */
+.books-grid,
+.films-grid,
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
 }
 
-/* Accent placeholders for each path */
-.tile.lit { --accent: #dcb77e; }
-.tile.cine { --accent: #d95d5d; }
-.tile.game { --accent: #5d9dd9; }
-
-.tile h2 {
-  margin: 0;
-  font-size: 1.3rem;
+/* On compact phones, allow slightly smaller cards */
+@media (max-width: 380px) {
+  .books-grid,
+  .films-grid,
+  .games-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.tile .accent {
-  color: var(--accent);
+/* Card internals: keep media (covers/posters) from shrinking too small */
+.cover,
+.poster {
+  width: 72px;
+  height: 108px;
+  border-radius: 8px;
+  flex: 0 0 auto;
 }
+
+@media (max-width: 480px) {
+  .cover,
+  .poster {
+    width: 64px;
+    height: 96px;
+  }
+}
+
+/* Touch ergonomics: bigger tap areas and clearer focus rings */
+:where(.btn, .tab, .tile) {
+  min-height: 44px;                 /* Apple HIG tap target */
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Make long titles/notes wrap gracefully */
+.book-title, .film-title, .game-title { word-wrap: break-word; overflow-wrap: anywhere; }
+.notes { hyphens: auto; }
