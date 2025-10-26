@@ -1,115 +1,72 @@
-/* 1950s Drive-In theme for Cinema
-   Neon glow, dusk sky, chrome edges, light film grain
-*/
-:root{
-  --bg:#001826;          /* twilight navy */
-  --card:#0a1f2d;        /* deeper panel */
-  --line:#163244;        /* cool border */
-  --ink:#eaf6ff;         /* cool white */
-  --muted:#a9c4d6;       /* soft teal-gray */
-  --accent:#47e3d8;      /* turquoise neon */
-  --accent-2:#ff5a66;    /* cherry neon */
+/* CINEMA THEME — 1950s DRIVE-IN AESTHETIC */
+
+:root {
+  --accent: #e35b5b;
+  --bg: #0d0e11;
+  --card: #15171d;
+  --line: #2a2d36;
+  --text: #f2f2f2;
+  --muted: #a1a1aa;
+  --radius: 22px;
 }
 
-/* Optional subtle film grain on the whole page */
-body{
-  background:
-    radial-gradient(1100px 700px at 50% -10%, rgba(71,227,216,.12), transparent 60%),
-    radial-gradient(900px 600px at 90% 120%, rgba(255,90,102,.10), transparent 55%),
-    var(--bg);
+body {
+  background: radial-gradient(circle at center, #121417 0%, #0b0b0e 100%);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-image: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.02), transparent 25%), 
+                    radial-gradient(circle at 80% 80%, rgba(255,255,255,0.02), transparent 25%);
 }
 
-/* Headings keep the cinematic flair */
-.title, .film-title{
-  font-family: "Avenir Next", "Poppins", system-ui, -apple-system, Segoe UI, Inter, Roboto, sans-serif;
-  letter-spacing:.2px;
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 60px rgba(227,91,91,0.15);
+  padding: 40px;
+  max-width: 800px;
+  text-align: center;
 }
 
-/* Tabs look like marquee buttons */
-.tabs{ display:flex; gap:8px; margin:0 0 14px; flex-wrap:wrap; }
-.tab{
-  background:linear-gradient(180deg,#0d2635,#0a2230);
-  color:var(--ink);
-  border:1px solid var(--line);
-  border-radius:999px;
-  padding:8px 12px;
-  cursor:pointer;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-  transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease;
-}
-.tab:hover{ transform: translateY(-1px); }
-.tab.is-active{
-  border-color: color-mix(in oklab, var(--accent) 70%, white);
-  box-shadow:
-    0 0 12px rgba(71,227,216,.35),
-    inset 0 0 0 1px rgba(255,255,255,.06);
+h1 {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
   color: var(--accent);
+  text-shadow: 0 0 12px rgba(227,91,91,0.7);
 }
 
-/* Grid of films */
-.films-grid{
-  display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap:14px;
+p {
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 0 auto 2rem auto;
 }
 
-/* Film card with neon edge */
-.film{
-  display:flex; gap:12px;
-  background: linear-gradient(180deg,#0c2230,#091c28);
-  border:1px solid var(--line);
-  border-radius:16px; padding:12px;
-  position:relative;
-  overflow:hidden;
-}
-.film::before{
-  content:"";
-  position:absolute; inset: -2px;
-  pointer-events:none;
-  border-radius:18px;
-  background:
-    radial-gradient(20px 20px at 10% 10%, rgba(71,227,216,.35), transparent 70%),
-    radial-gradient(24px 24px at 90% 90%, rgba(255,90,102,.30), transparent 70%);
-  filter: blur(14px);
-  opacity:.45;
+a {
+  color: #58c8f6;
+  text-decoration: none;
 }
 
-/* Poster “screen” with subtle curvature and scanline */
-.poster{
-  width:72px; height:108px; border-radius:8px; flex:0 0 auto;
-  background:
-    repeating-linear-gradient( to bottom, rgba(255,255,255,.06) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg,#113447,#0a2330 70%);
-  border:1px solid var(--line);
-  box-shadow: inset 0 0 12px rgba(0,0,0,.35);
+a:hover {
+  color: #fff;
+  text-shadow: 0 0 10px #58c8f6;
 }
 
-/* Metadata stack */
-.meta{ display:flex; flex-direction:column; gap:6px; min-width:0; }
-.film-title{ margin:0; font-size:1.05rem; line-height:1.25; }
-.film-director{ color:var(--muted); font-size:.92rem; }
-
-/* Badges (ratings, status) use neon accent chips */
-.badges{ display:flex; gap:6px; flex-wrap:wrap; }
-.badge{
-  border:1px solid var(--line);
-  padding:2px 8px; border-radius:999px; font-size:.8em; color:var(--muted);
-  background: linear-gradient(180deg, rgba(71,227,216,.10), rgba(255,90,102,.08));
+/* Neon flicker effect for cinema title */
+@keyframes flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    text-shadow: 0 0 10px #ff7070, 0 0 20px #ff7070, 0 0 30px #ff4a4a;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
 }
 
-/* Notes copy */
-.notes{ margin:.25rem 0 .5rem; color:var(--ink); opacity:.92 }
-
-/* Actions: small buttons with neon hover */
-.actions{ display:flex; gap:8px; flex-wrap:wrap; }
-.btn.small{ padding:8px 10px; border-radius:10px; font-size:.9rem; }
-.btn.ghost{ background:transparent; }
-.btn.small:hover{
-  box-shadow:
-    0 0 12px rgba(71,227,216,.25),
-    0 0 12px rgba(255,90,102,.15);
-  border-color: color-mix(in oklab, var(--accent) 60%, var(--line));
+h1 {
+  animation: flicker 3s infinite;
 }
-
-/* Make long titles wrap nicely */
-.film-title{ overflow-wrap:anywhere; }
