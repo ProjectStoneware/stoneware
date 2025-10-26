@@ -1,86 +1,145 @@
+/* ================================
+   Stoneware · Core Styles (v2)
+   - Home uses .center
+   - Subpages use .container (stacked)
+   - Better defaults for cards, inputs, buttons
+================================== */
+
+/* Design tokens */
 :root {
   --bg: #0c0e11;
   --card: #111418;
-  --text: #eaeaea;
+  --ink: #eaeaea;
   --muted: #a0a0a0;
   --line: #2a2a2a;
   --radius: 16px;
-  font-family: system-ui, -apple-system, sans-serif;
+
+  --accent: #dcb77e;     /* placeholder; themed per page */
+  font-family: system-ui, -apple-system, Segoe UI, Inter, Roboto, sans-serif;
 }
 
+/* Base */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
 body {
-  background: var(--bg);
-  color: var(--text);
   margin: 0;
-  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* Layout
+   - .container: stacked page sections with max width (use on subpages)
+   - .center: only for the homepage hero to center one card
+*/
 .container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+  width: min(1100px, 92vw);
+  margin: 0 auto;
+  padding: 24px;
 }
 
+.center {
+  display: grid;
+  place-items: center;
+  min-height: 70vh;
+}
+
+/* Cards */
 .card {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 40px;
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+  padding: 24px;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, .30);
 }
 
-.title {
-  font-size: clamp(28px, 5vw, 44px);
-  margin: 0 0 10px;
+/* Typography */
+.title { font-weight: 700; font-size: clamp(28px, 5vw, 44px); margin: 0 0 8px; }
+.sub   { color: var(--muted); margin: 0 0 16px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #171a21, #12151a);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.btn.small { padding: 8px 10px; border-radius: 10px; font-size: .9rem; }
+.btn.ghost { background: transparent; }
+
+/* Inputs */
+.input, input[type="search"] {
+  background: #0f1116;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.input::placeholder { color: #8f8f8f; }
+
+/* Tabs */
+.tabs { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
+.tab {
+  background: #0f1116;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, transform .15s ease;
+}
+.tab:hover { transform: translateY(-1px); }
+.tab.is-active { border-color: var(--accent); color: var(--accent); }
+
+/* Grids (used on subpages) */
+.books-grid,
+.films-grid,
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
-.sub {
-  color: var(--muted);
-  margin: 0 0 24px;
-}
-
+/* Home tiles */
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
 }
-
 .tile {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: flex; flex-direction: column; gap: 8px;
   cursor: pointer;
   background: linear-gradient(180deg, #12141a, #0e1116);
-  transition: 0.2s ease;
+  transition: .2s ease;
 }
+.tile:hover { box-shadow: 0 10px 30px rgba(0,0,0,.45); transform: translateY(-2px); }
+.badge { font-size: .85em; color: var(--muted); }
 
-.tile:hover {
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-  transform: translateY(-2px);
-}
-
-.badge {
-  font-size: 0.85em;
-  color: var(--muted);
-}
-
-/* Accent placeholders (overridden by each theme later) */
-.tile.lit { --accent: #dcb77e; }
+/* Accent placeholders for home */
+.tile.lit  { --accent: #dcb77e; }
 .tile.cine { --accent: #d95d5d; }
 .tile.game { --accent: #5d9dd9; }
 .tile h2 { margin: 0; font-size: 1.3rem; }
 .tile .accent { color: var(--accent); }
 
-/* Make it responsive */
-@media (max-width: 600px) {
-  .card {
-    padding: 20px;
-  }
-  .tiles {
-    grid-template-columns: 1fr;
-  }
+/* Accessibility & touch */
+:where(.btn, .tab, .tile) { min-height: 44px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Responsive helpers */
+@media (max-width: 480px) {
+  .container { padding: 16px; }
+  .card { padding: 18px; }
+  .title { font-size: clamp(22px, 7vw, 36px); }
 }
