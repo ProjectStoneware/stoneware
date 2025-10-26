@@ -11,28 +11,28 @@
 </head>
 
 <body class="theme-literature">
-  <!-- Header (title + quill + Home) -->
+  <!-- Header -->
   <header class="container site-header">
-    <nav class="row titlebar">
-      <img class="title-emblem" src="../assets/quill-pen.png" alt="Quill pen" />
-      <h1 class="title">Literature</h1>
+    <div class="titlebar">
+      <img src="../assets/quill-pen.png" class="title-emblem" alt="Quill pen">
+      <h1 class="title" style="margin:0">Literature</h1>
       <a class="btn backhome" href="../">← Home</a>
-    </nav>
+    </div>
 
     <!-- Pinned shelves (sticky) -->
-    <nav id="shelfTabs" class="tabs tabs--sticky" role="tablist" aria-label="Shelves">
+    <div id="shelfTabs" class="tabs tabs--sticky" role="tablist" aria-label="Shelves">
       <button class="tab is-active" role="tab" aria-selected="true" data-shelf="toRead"  id="tab-toRead">To Read</button>
       <button class="tab" role="tab" aria-selected="false" data-shelf="reading" id="tab-reading">Reading</button>
       <button class="tab" role="tab" aria-selected="false" data-shelf="finished" id="tab-finished">Finished</button>
       <button class="tab" role="tab" aria-selected="false" data-shelf="abandoned" id="tab-abandoned">Abandoned</button>
-    </nav>
+    </div>
   </header>
 
   <!-- Main content -->
   <main class="container main-content">
 
     <!-- Search (independent of shelves) -->
-    <section class="card" aria-labelledby="searchHeading">
+    <section class="card" aria-labelledby="searchHeading" style="margin-bottom:16px">
       <h2 id="searchHeading" class="visually-hidden">Search</h2>
       <form id="searchForm" class="row" role="search">
         <input id="q" class="input" type="search" placeholder="Search title, author, or ISBN…" aria-label="Search books" style="flex:1;min-width:240px" />
@@ -40,16 +40,14 @@
         <span id="status" class="sub" style="margin-left:8px" aria-live="polite"></span>
       </form>
 
-      <!-- Search results live here; entirely separate from shelves -->
       <div id="results" style="margin-top:12px">
         <div id="resultsGrid" class="books-grid" data-mode="search" aria-live="polite"></div>
       </div>
     </section>
 
-    <!-- Your Shelves (always your saved books) -->
+    <!-- Your Shelves -->
     <section class="card" aria-labelledby="shelvesHeading">
       <h2 id="shelvesHeading" class="visually-hidden">Your Shelves</h2>
-      <!-- Saved items render here; separate from search results -->
       <div id="shelfGrid" class="books-grid" data-mode="shelf" aria-live="polite"></div>
     </section>
   </main>
@@ -59,7 +57,7 @@
     <small>© <span id="y"></span> ProjectStoneware · Literature</small>
   </footer>
 
-  <!-- Details modal (shows full summary; no external link) -->
+  <!-- Details modal -->
   <div id="modal" class="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header>
@@ -69,28 +67,18 @@
         </div>
         <button class="close" id="modalClose" aria-label="Close">✕</button>
       </header>
-      <div class="body" id="modalBody"><!-- full summary goes here --></div>
+      <div class="body" id="modalBody"><p><em>Fetching details…</em></p></div>
       <footer>
         <a class="close btn small" id="modalCancel">Close</a>
       </footer>
     </div>
   </div>
 
-  <!-- Tiny inline script just for year stamp -->
-  <script>
-    const y = document.getElementById('y');
-    if (y) y.textContent = new Date().getFullYear();
-  </script>
-
-  <!-- Main logic for search/shelves/ratings/modal -->
+  <!-- Year and main logic -->
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
   <script defer src="books.js"></script>
 
-  <noscript>
-    <style>#resultsGrid,#shelfGrid{display:none}</style>
-    <div class="container"><p class="sub">Enable JavaScript to use search, shelves, and ratings.</p></div>
-  </noscript>
-
-  <!-- Utility: visually hidden class for headings not shown visually -->
+  <!-- Visually hidden utility -->
   <style>
     .visually-hidden{
       position:absolute!important; width:1px!important; height:1px!important;
