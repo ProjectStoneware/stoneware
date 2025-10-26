@@ -1,250 +1,219 @@
 /* ============================================================================
-   Stoneware · Literature (Stable Build)
-   - Google Books Search (client-side)
-   - Shelves: toRead, reading, finished, abandoned (localStorage)
-   - Details modal with full summary
-   - Quarter-star ratings display (textual for now)
-   - Defensive init + DOM guards to prevent “page jump”
+   Stoneware · Literature (polished)
+   - Google Books search with thumbnails
+   - Add to shelves (localStorage)
+   - Details modal (full summary + info link)
+   - Quarter-star ratings for SAVED items (slider + text)
+   - Defensive DOM init (no page jump)
 ============================================================================ */
 
 (function () {
-  // ---- Utilities -----------------------------------------------------------
+  // ---------- utils ----------
   const API = "https://www.googleapis.com/books/v1/volumes?q=";
-  const SHELVES = ["toRead", "reading", "finished", "abandoned"];
+  const SHELF_LABEL = { toRead:"To Read", reading:"Reading", finished:"Finished", abandoned:"Abandoned" };
   let currentShelf = "toRead";
 
-  const qs  = (sel, root = document) => root.querySelector(sel);
-  const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const safeJSON = (s, fb) => { try { return JSON.parse(s); } catch { return fb; } };
-  const esc = (s) => (s || "").replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-  const truncate = (s, n) => {
-    s = s || "";
-    return s.length > n ? s.slice(0, n - 1) + "…" : s;
-  };
+  const $  = (s, r=document)=>r.querySelector(s);
+  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+  const safeJSON = (s, fb)=>{ try { return JSON.parse(s); } catch { return fb; } };
+  const esc = s => (s||"").replace(/[&<>"]/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[m]));
+  const clampQuarter = v => Math.round(Number(v||0)*4)/4;
 
-  // Star text render (quarter precision display only)
-  function renderStars(r) {
-    r = Number(r || 0);
-    const out = [];
-    for (let i = 1; i <= 5; i++) {
-      const diff = r - (i - 1);
-      if (diff >= 1) out.push("★");
-      else if (diff >= 0.75) out.push("¾");
-      else if (diff >= 0.5) out.push("½");
-      else if (diff >= 0.25) out.push("¼");
-      else out.push("☆");
-    }
-    return out.join("");
+  // storage per shelf
+  const load = shelf => safeJSON(localStorage.getItem(`books_${shelf}`), []);
+  const save = (shelf, data) => localStorage.setItem(`books_${shelf}`, JSON.stringify(data));
+
+  // ---------- search ----------
+  async function searchBooks(q) {
+    const res = await fetch(API + encodeURIComponent(q) + "&maxResults=12");
+    if (!res.ok) throw new Error("Network");
+    const { items=[] } = await res.json();
+    return items.map(it => {
+      const v = it.volumeInfo || {};
+      const thumb = (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://");
+      return {
+        id: it.id,
+        title: v.title || "Untitled",
+        authors: v.authors || [],
+        description: v.description || "",
+        infoLink: v.infoLink || "",
+        thumbnail: thumb
+      };
+    });
   }
 
-  // Local storage helpers (per shelf)
-  function loadShelf(shelf) {
-    return safeJSON(localStorage.getItem(`books_${shelf}`), []);
-  }
-  function saveShelf(shelf, data) {
-    localStorage.setItem(`books_${shelf}`, JSON.stringify(data));
-  }
-
-  // ---- Rendering -----------------------------------------------------------
-  function renderBooks(grid, books, fromSearch) {
-    if (!grid) return;
+  // ---------- rendering ----------
+  function renderSearch(grid, books) {
     grid.innerHTML = "";
-    if (!books || !books.length) {
-      grid.innerHTML = `<p class="sub" style="padding:20px;text-align:center">No books found.</p>`;
+    if (!books.length) {
+      grid.innerHTML = `<p class="sub" style="padding:20px;text-align:center">No results.</p>`;
       return;
     }
 
-    books.forEach((book) => {
-      const article = document.createElement("article");
-      article.className = "book";
-      const rating = Number(book.rating || 0);
-      const ratingDisplay = rating ? `${rating.toFixed(2)} ★ ${renderStars(rating)}` : "No rating";
-
-      article.innerHTML = `
-        <div class="cover"></div>
+    books.forEach(b => {
+      const el = document.createElement("article");
+      el.className = "book search";
+      el.innerHTML = `
+        <div class="cover" ${b.thumbnail ? `style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"`:""}></div>
         <div class="meta">
-          <h3 class="book-title">${esc(book.title || "Untitled")}</h3>
-          <div class="book-author">${esc((book.authors || []).join(", "))}</div>
-          ${book.description ? `<p class="notes">${esc(truncate(book.description, 260))}</p>` : ""}
+          <h3 class="book-title">${esc(b.title)}</h3>
+          <div class="book-author">${esc(b.authors.join(", "))}</div>
+          ${b.description ? `<p class="notes">${esc(b.description.substring(0,260))}${b.description.length>260?"…":""}</p>` : ""}
           <div class="badges">
-            <div class="badge">${fromSearch ? "Search result" : currentShelfLabel()}</div>
-            <div class="badge">${ratingDisplay}</div>
+            <div class="badge">Search result</div>
           </div>
           <div class="actions">
-            ${
-              fromSearch
-                ? `<button class="btn small" data-add>Add to ${currentShelfLabel()}</button>`
-                : `<button class="btn small ghost" data-remove>Remove</button>`
-            }
+            <button class="btn small" data-add>Add to ${SHELF_LABEL[currentShelf]}</button>
             <button class="btn small" data-view>Details</button>
           </div>
         </div>
       `;
 
-      // Wire buttons
-      const addBtn = qs("[data-add]", article);
-      const rmBtn  = qs("[data-remove]", article);
-      const viewBtn= qs("[data-view]", article);
+      // wire buttons
+      el.querySelector("[data-add]").addEventListener("click", (ev)=>{
+        ev.preventDefault();
+        const data = load(currentShelf);
+        if (!data.some(x=>x.id===b.id)) { data.push({ ...b, rating:0, status:currentShelf }); save(currentShelf, data); }
+        renderShelf(grid, currentShelf);
+      });
+      el.querySelector("[data-view]").addEventListener("click", (ev)=>{
+        ev.preventDefault(); openModal(b);
+      });
 
-      if (addBtn) {
-        addBtn.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          const data = loadShelf(currentShelf);
-          if (!data.some(b => b.id === book.id)) {
-            data.push({ ...book, status: currentShelf, rating: 0 });
-            saveShelf(currentShelf, data);
-            renderActive(grid);
-          }
-        });
-      }
-
-      if (rmBtn) {
-        rmBtn.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          let data = loadShelf(currentShelf);
-          data = data.filter(b => b.id !== book.id);
-          saveShelf(currentShelf, data);
-          renderActive(grid);
-        });
-      }
-
-      if (viewBtn) {
-        viewBtn.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          openModal(book);
-        });
-      }
-
-      grid.appendChild(article);
+      grid.appendChild(el);
     });
   }
 
-  function currentShelfLabel() {
-    switch (currentShelf) {
-      case "toRead":   return "To Read";
-      case "reading":  return "Reading";
-      case "finished": return "Finished";
-      case "abandoned":return "Abandoned";
-      default: return "Shelf";
-    }
-  }
+  function renderShelf(grid, shelf) {
+    currentShelf = shelf;
+    // highlight tab
+    $$(".tab").forEach(t=>{
+      const active = t.dataset.shelf===shelf;
+      t.classList.toggle("is-active", active);
+      t.setAttribute("aria-selected", active ? "true" : "false");
+    });
 
-  function renderActive(grid) {
-    const books = loadShelf(currentShelf);
-    renderBooks(grid, books, false);
-  }
-
-  // ---- Modal ---------------------------------------------------------------
-  function openModal(b) {
-    const modal = qs("#modal");
-    if (!modal) return;
-
-    const modalTitle  = qs("#modalTitle");
-    const modalByline = qs("#modalByline");
-    const modalBody   = qs("#modalBody");
-    const modalInfo   = qs("#modalInfo");
-
-    if (modalTitle)  modalTitle.textContent  = b.title || "Untitled";
-    if (modalByline) modalByline.textContent = (b.authors || []).join(", ");
-    if (modalBody)   modalBody.innerHTML     = b.description
-      ? `<p>${esc(b.description).replace(/\n{2,}/g, "<br><br>")}</p>`
-      : `<p><em>No summary available.</em></p>`;
-    if (modalInfo) {
-      if (b.infoLink) {
-        modalInfo.href = b.infoLink;
-        modalInfo.style.display = "";
-      } else {
-        modalInfo.removeAttribute("href");
-        modalInfo.style.display = "none";
-      }
+    const books = load(shelf);
+    grid.innerHTML = "";
+    if (!books.length) {
+      grid.innerHTML = `<p class="sub" style="padding:20px;text-align:center">No books on “${SHELF_LABEL[shelf]}”.</p>`;
+      return;
     }
 
-    modal.classList.add("show");
-    modal.setAttribute("aria-hidden", "false");
+    books.forEach(b=>{
+      const el = document.createElement("article");
+      el.className = "book";
+      const rating = clampQuarter(b.rating||0);
 
-    const escHandler = (e) => { if (e.key === "Escape") closeModal(); };
-    document.addEventListener("keydown", escHandler, { once: true });
+      el.innerHTML = `
+        <div class="cover" ${b.thumbnail ? `style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"`:""}></div>
+        <div class="meta">
+          <h3 class="book-title">${esc(b.title)}</h3>
+          <div class="book-author">${esc((b.authors||[]).join(", "))}</div>
+          <div class="badges">
+            <div class="badge">${SHELF_LABEL[shelf]}</div>
+            <div class="badge"><output data-out>${rating ? rating.toFixed(2).replace(/\.00$/,""): "No rating"}</output> ★</div>
+          </div>
 
-    function closeModal() {
-      modal.classList.remove("show");
-      modal.setAttribute("aria-hidden", "true");
-    }
+          <div class="rating">
+            <label>Rating:
+              <input type="range" min="0" max="5" step="0.25" value="${rating}" />
+            </label>
+          </div>
 
-    const closeBtn  = qs("#modalClose");
-    const cancelBtn = qs("#modalCancel");
-    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); }, { once: true });
-    closeBtn  && closeBtn.addEventListener("click", closeModal, { once: true });
-    cancelBtn && cancelBtn.addEventListener("click", closeModal, { once: true });
-  }
+          <div class="actions">
+            <button class="btn small" data-view>Details</button>
+            <button class="btn small ghost" data-remove>Remove</button>
+          </div>
+        </div>
+      `;
 
-  // ---- Search --------------------------------------------------------------
-  async function doSearch(q, grid, statusEl) {
-    try {
-      statusEl && (statusEl.textContent = "Searching…");
-      const res = await fetch(API + encodeURIComponent(q) + "&maxResults=12");
-      if (!res.ok) throw new Error("Network error");
-      const data = await res.json();
-      const items = data.items || [];
-      const books = items.map((it) => {
-        const v = it.volumeInfo || {};
-        return {
-          id: it.id,
-          title: v.title || "Untitled",
-          authors: v.authors || [],
-          description: v.description || "",
-          infoLink: v.infoLink || "",
-        };
+      // rating slider
+      const slider = el.querySelector('input[type="range"]');
+      const out = el.querySelector('[data-out]');
+      slider.addEventListener("input", ()=>{
+        const v = clampQuarter(slider.value);
+        out.textContent = v.toFixed(2).replace(/\.00$/,"");
+        // persist
+        const data = load(shelf).map(x => x.id===b.id ? { ...x, rating: v } : x);
+        save(shelf, data);
       });
-      statusEl && (statusEl.textContent = books.length ? "" : "No results.");
-      renderBooks(grid, books, true);
-    } catch (err) {
-      console.error(err);
-      statusEl && (statusEl.textContent = "Search failed. Try again.");
-    }
+
+      // remove
+      el.querySelector("[data-remove]").addEventListener("click",(ev)=>{
+        ev.preventDefault();
+        let data = load(shelf).filter(x=>x.id!==b.id);
+        save(shelf, data);
+        renderShelf(grid, shelf);
+      });
+
+      // view
+      el.querySelector("[data-view]").addEventListener("click",(ev)=>{
+        ev.preventDefault(); openModal(b);
+      });
+
+      grid.appendChild(el);
+    });
   }
 
-  // ---- Initialization (defensive) -----------------------------------------
-  function init() {
-    const form    = qs("#searchForm");
-    const input   = qs("#q");
-    const statusEl= qs("#status");
-    const grid    = qs(".books-grid");
-    const tabs    = qsa(".tab");
+  // ---------- modal ----------
+  function openModal(b) {
+    const m = $("#modal"); if (!m) return;
+    $("#modalTitle").textContent = b.title || "Untitled";
+    $("#modalByline").textContent = (b.authors||[]).join(", ");
+    $("#modalBody").innerHTML = b.description
+      ? `<p>${esc(b.description).replace(/\n{2,}/g,"<br><br>")}</p>`
+      : `<p><em>No summary available.</em></p>`;
+    if (b.infoLink) { $("#modalInfo").href = b.infoLink; $("#modalInfo").style.display=""; }
+    else { $("#modalInfo").removeAttribute("href"); $("#modalInfo").style.display="none"; }
 
-    // If anything essential is missing, bail silently (prevents JS errors)
+    m.classList.add("show"); m.setAttribute("aria-hidden","false");
+
+    const close = ()=>{ m.classList.remove("show"); m.setAttribute("aria-hidden","true"); };
+    $("#modalClose").onclick = close;
+    $("#modalCancel").onclick = close;
+    m.addEventListener("click", e=>{ if (e.target===m) close(); }, { once:true });
+    document.addEventListener("keydown", e=>{ if (e.key==="Escape") close(); }, { once:true });
+  }
+
+  // ---------- init ----------
+  function init(){
+    const grid = $(".books-grid");
+    const form = $("#searchForm");
+    const input = $("#q");
+    const status = $("#status");
     if (!grid) return;
 
-    // Prevent form from reloading page even if listener doesn’t attach
-    if (form) form.setAttribute("onsubmit", "return false");
-
-    // Attach submit handler safely
+    // form: prevent page reload
+    if (form) form.setAttribute("onsubmit","return false");
     if (form && input) {
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();                 // <-- stops the "jump to top"
-        const q = (input.value || "").trim();
+      form.addEventListener("submit", (e)=>{
+        e.preventDefault();
+        const q = (input.value||"").trim();
         if (!q) return;
-        doSearch(q, grid, statusEl);
-      });
-    }
-
-    // Tabs
-    if (tabs.length) {
-      tabs.forEach((tab) => {
-        tab.addEventListener("click", (e) => {
-          e.preventDefault();
-          tabs.forEach(t => t.classList.remove("is-active"));
-          tab.classList.add("is-active");
-          currentShelf = tab.dataset.shelf || "toRead";
-          renderActive(grid);
+        status && (status.textContent = "Searching…");
+        searchBooks(q).then(books=>{
+          status && (status.textContent = books.length ? "" : "No results.");
+          renderSearch(grid, books);
+        }).catch(()=>{
+          status && (status.textContent = "Search failed. Try again.");
         });
       });
     }
 
-    // First render
-    renderActive(grid);
+    // tabs
+    $$(".tab").forEach(tab=>{
+      tab.addEventListener("click", (e)=>{
+        e.preventDefault();
+        currentShelf = tab.dataset.shelf || "toRead";
+        renderShelf(grid, currentShelf);
+      });
+    });
+
+    // initial shelf render
+    renderShelf(grid, currentShelf);
   }
 
-  // Wait for DOM
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
