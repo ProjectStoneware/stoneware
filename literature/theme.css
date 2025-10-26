@@ -1,53 +1,192 @@
-/* Dark Academia theme overrides for Literature */
-:root{
-  --bg:#0b0a0a;
-  --card:#141213;
-  --line:#292426;
-  --ink:#e9e1d8;
-  --muted:#b3a79b;
-  --accent:#dcb77e;
+/* =========================================================
+   Stoneware · Literature (Dark Academia Theme)
+   Scoped to <body class="theme-literature"> so it won't
+   affect Cinema/Games.
+   ========================================================= */
+
+/* ---- Palette & tokens (override core) ---- */
+.theme-literature {
+  --bg: #0e0d0c;          /* charcoal-brown */
+  --ink: #e9e1d8;         /* parchment ink */
+  --muted: #b6a99a;       /* soft sepia */
+  --card: #161312;        /* panel */
+  --line: #2b2421;        /* subtle border */
+  --accent: #d6b276;      /* brass/ochre */
+  --shadow: rgba(0,0,0,.55);
 }
 
-/* Typography vibe */
-@font-face{
-  font-family:"LiteratureSerif";
-  src: local("Times New Roman");
+/* ---- Background: paper grain + vignette (CSS only) ---- */
+.theme-literature {
+  background:
+    radial-gradient(1200px 600px at 50% 0%, rgba(255,255,255,0.02), transparent 60%),
+    radial-gradient(800px 400px at 0% 100%, rgba(255,255,255,0.03), transparent 60%),
+    radial-gradient(900px 450px at 100% 100%, rgba(255,255,255,0.02), transparent 60%),
+    linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.55)),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 2px, rgba(0,0,0,.015) 2px 4px),
+    var(--bg);
+  background-blend-mode: screen, screen, screen, multiply, overlay, normal;
 }
-.title, .book-title{ font-family: LiteratureSerif, Georgia, serif; }
 
-/* Inputs */
-.input{
-  background:#0f0d0d; color:var(--ink);
-  border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+/* ---- Typography: serious serif for titles ---- */
+@font-face {
+  font-family: "LiteratureSerif";
+  src: local("Times New Roman"), local("TimesNewRomanPSMT");
+}
+.theme-literature .title,
+.theme-literature .book-title {
+  font-family: LiteratureSerif, Georgia, serif;
+  letter-spacing: .2px;
 }
 
-/* Tabs (shelves) */
-.tabs{ display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
-.tab{
-  background:#0f0d0d; color:var(--ink);
-  border:1px solid var(--line); border-radius:999px; padding:8px 12px; cursor:pointer;
+/* ---- Containers / cards ---- */
+.theme-literature .card {
+  background: linear-gradient(180deg, #1a1615, #13100f);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px var(--shadow);
 }
-.tab.is-active{ border-color:var(--accent); color:var(--accent); }
 
-/* Books grid + card */
-.books-grid{
-  display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px;
+/* ---- Search bar polish ---- */
+.theme-literature .input {
+  background: #121010;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
 }
-.book{
-  display:flex; gap:12px; background:linear-gradient(180deg,#171415,#120f10);
-  border:1px solid var(--line); border-radius:16px; padding:12px;
+.theme-literature .btn {
+  background: linear-gradient(180deg, #1c1816, #13100f);
+  border: 1px solid var(--line);
+  color: var(--ink);
 }
-.cover{
-  width:72px; height:108px; border-radius:8px;
-  background:radial-gradient(ellipse at 40% 30%, #443833, #1a1412 70%);
-  border:1px solid var(--line); flex:0 0 auto;
+.theme-literature .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px var(--shadow);
 }
-.meta{ display:flex; flex-direction:column; gap:6px; min-width:0; }
-.book-title{ margin:0; font-size:1.05rem; line-height:1.25; }
-.book-author{ color:var(--muted); font-size:.9rem; }
-.badges{ display:flex; gap:6px; flex-wrap:wrap; }
-.badge{ border:1px solid var(--line); padding:2px 8px; border-radius:999px; font-size:.8em; color:var(--muted); }
-.notes{ margin:.25rem 0 .5rem; color:var(--ink); opacity:.9 }
-.actions{ display:flex; gap:8px; flex-wrap:wrap; }
-.btn.small{ padding:8px 10px; border-radius:10px; font-size:.9rem; }
-.btn.ghost{ background:transparent; }
+
+/* ---- Tabs (shelves) ---- */
+.theme-literature .tabs { gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.theme-literature .tab {
+  background: #141110;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 14px;
+}
+.theme-literature .tab.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 60%, black);
+}
+
+/* ---- Books grid & cards ---- */
+.theme-literature .books-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+}
+
+.theme-literature .book {
+  display: flex;
+  gap: 12px;
+  background: linear-gradient(180deg, #191514, #120f0e);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+.theme-literature .book.search {
+  background: linear-gradient(180deg, #1a1514, #13100f);
+}
+
+.theme-literature .cover {
+  width: 72px; height: 108px; flex: 0 0 auto; border-radius: 8px;
+  background: radial-gradient(ellipse at 40% 30%, #463a34, #1a1412 70%); /* placeholder */
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 12px rgba(0,0,0,.35);
+}
+
+.theme-literature .meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.theme-literature .book-title { margin: 0; font-size: 1.06rem; line-height: 1.25; }
+.theme-literature .book-author { color: var(--muted); font-size: .92rem; }
+.theme-literature .notes { color: var(--ink); opacity: .92; margin: .25rem 0 .5rem; }
+
+.theme-literature .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.theme-literature .badge {
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: .8em;
+}
+
+/* ---- Rating row ---- */
+.theme-literature .rating { display: flex; align-items: center; gap: 10px; }
+.theme-literature input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 170px; height: 4px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #b89259);
+  outline: none;
+}
+.theme-literature input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ink); border: 1px solid var(--line);
+  box-shadow: 0 0 0 2px rgba(0,0,0,.25);
+}
+.theme-literature input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ink); border: 1px solid var(--line);
+}
+
+/* ---- Actions ---- */
+.theme-literature .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.theme-literature .btn.small { padding: 8px 10px; border-radius: 10px; font-size: .9rem; }
+.theme-literature .btn.ghost { background: transparent; }
+
+/* ---- Modal (Details) ---- */
+.theme-literature .modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px; z-index: 9999;
+}
+.theme-literature .modal-backdrop.show { display: flex; }
+
+.theme-literature .modal {
+  width: min(760px, 95vw);
+  background: linear-gradient(180deg, #191513, #120f0e);
+  border: 1px solid var(--line); border-radius: 16px; color: var(--ink);
+  max-height: 85vh; overflow: auto; box-shadow: 0 20px 60px var(--shadow);
+}
+.theme-literature .modal header,
+.theme-literature .modal .body,
+.theme-literature .modal footer { padding: 16px 18px; }
+.theme-literature .modal header {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.theme-literature .modal h3 { margin: 0; font-size: 1.15rem; }
+.theme-literature .modal .byline { color: var(--muted); font-size: .95rem; margin-top: 4px; }
+.theme-literature .modal .body { line-height: 1.6; }
+.theme-literature .modal .body p { margin: 0 0 12px; }
+.theme-literature .modal footer {
+  display: flex; gap: 10px; justify-content: flex-end;
+  border-top: 1px solid var(--line);
+}
+.theme-literature .modal .close {
+  background: transparent; border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 12px; color: var(--ink);
+}
+.theme-literature .modal .primary {
+  border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 10px; padding: 8px 12px;
+}
+
+/* ---- Responsive tweaks ---- */
+@media (max-width: 560px) {
+  .theme-literature .books-grid { grid-template-columns: 1fr; }
+  .theme-literature .cover { width: 64px; height: 96px; }
+  .theme-literature input[type="range"] { width: 100%; }
+}

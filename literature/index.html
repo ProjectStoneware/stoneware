@@ -5,25 +5,27 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Stoneware — Literature</title>
 
-  <!-- Base styles and page theme -->
+  <!-- Shared base + page theme -->
   <link rel="stylesheet" href="../core/styles.css" />
   <link rel="stylesheet" href="theme.css" />
 </head>
 
-<body>
+<body class="theme-literature">
+  <!-- Header -->
   <header class="container" style="padding-bottom:0">
     <nav class="row" style="display:flex;align-items:center;gap:12px">
       <a class="btn" href="../">← Home</a>
       <h1 class="title" style="margin:8px 0 0">Literature</h1>
     </nav>
-    <p class="sub">Search Google Books, add to a shelf, then rate with quarter-star precision.</p>
+    <!-- (Removed subtext per your request) -->
   </header>
 
+  <!-- Main content -->
   <main class="container">
     <!-- Search -->
     <section class="card" style="margin-bottom:16px">
       <form id="searchForm" class="row">
-        <input id="q" class="input" type="search" placeholder="Search title, author, or ISBN…" aria-label="Search books" style="flex:1;min-width:240px">
+        <input id="q" class="input" type="search" placeholder="Search title, author, or ISBN…" aria-label="Search books" style="flex:1;min-width:240px" />
         <button class="btn" type="submit">Search</button>
         <span id="status" class="sub" style="margin-left:8px"></span>
       </form>
@@ -33,26 +35,46 @@
     <section class="card">
       <div class="tabs" role="tablist" aria-label="Shelves">
         <button class="tab is-active" role="tab" aria-selected="true" data-shelf="toRead">To Read</button>
-        <button class="tab" role="tab" data-shelf="reading">Reading</button>
-        <button class="tab" role="tab" data-shelf="finished">Finished</button>
-        <button class="tab" role="tab" data-shelf="abandoned">Abandoned</button>
+        <button class="tab" role="tab" aria-selected="false" data-shelf="reading">Reading</button>
+        <button class="tab" role="tab" aria-selected="false" data-shelf="finished">Finished</button>
+        <button class="tab" role="tab" aria-selected="false" data-shelf="abandoned">Abandoned</button>
       </div>
 
-      <!-- Results and shelf items render here -->
+      <!-- Grid of book cards (search results or shelf items) -->
       <div class="books-grid"></div>
     </section>
   </main>
 
+  <!-- Footer -->
   <footer class="container" style="opacity:.7;margin-top:12px">
     <small>© <span id="y"></span> ProjectStoneware · Literature</small>
   </footer>
 
+  <!-- Details modal (hidden until opened) -->
+  <div id="modal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header>
+        <div>
+          <h3 id="modalTitle">Title</h3>
+          <div class="byline" id="modalByline"></div>
+        </div>
+        <button class="close" id="modalClose" aria-label="Close">✕</button>
+      </header>
+      <div class="body" id="modalBody"><!-- full summary goes here --></div>
+      <footer>
+        <a class="close btn small" id="modalCancel">Close</a>
+        <a class="primary btn small" id="modalInfo" href="#" target="_blank" rel="noopener">Open on Google Books ↗</a>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Tiny inline script just for year stamp -->
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
   </script>
 
-  <!-- Logic for search/shelves/ratings -->
-  <script src="books.js"></script>
+  <!-- Main logic for search/shelves/ratings/modal -->
+  <script defer src="books.js"></script>
 
   <noscript>
     <style>.books-grid{display:none}</style>
