@@ -1,0 +1,53 @@
+/* Dark Academia theme overrides for Literature */
+:root{
+  --bg:#0b0a0a;
+  --card:#141213;
+  --line:#292426;
+  --ink:#e9e1d8;
+  --muted:#b3a79b;
+  --accent:#dcb77e;
+}
+
+/* Typography vibe */
+@font-face{
+  font-family:"LiteratureSerif";
+  src: local("Times New Roman");
+}
+.title, .book-title{ font-family: LiteratureSerif, Georgia, serif; }
+
+/* Inputs */
+.input{
+  background:#0f0d0d; color:var(--ink);
+  border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+}
+
+/* Tabs (shelves) */
+.tabs{ display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.tab{
+  background:#0f0d0d; color:var(--ink);
+  border:1px solid var(--line); border-radius:999px; padding:8px 12px; cursor:pointer;
+}
+.tab.is-active{ border-color:var(--accent); color:var(--accent); }
+
+/* Books grid + card */
+.books-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px;
+}
+.book{
+  display:flex; gap:12px; background:linear-gradient(180deg,#171415,#120f10);
+  border:1px solid var(--line); border-radius:16px; padding:12px;
+}
+.cover{
+  width:72px; height:108px; border-radius:8px;
+  background:radial-gradient(ellipse at 40% 30%, #443833, #1a1412 70%);
+  border:1px solid var(--line); flex:0 0 auto;
+}
+.meta{ display:flex; flex-direction:column; gap:6px; min-width:0; }
+.book-title{ margin:0; font-size:1.05rem; line-height:1.25; }
+.book-author{ color:var(--muted); font-size:.9rem; }
+.badges{ display:flex; gap:6px; flex-wrap:wrap; }
+.badge{ border:1px solid var(--line); padding:2px 8px; border-radius:999px; font-size:.8em; color:var(--muted); }
+.notes{ margin:.25rem 0 .5rem; color:var(--ink); opacity:.9 }
+.actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.btn.small{ padding:8px 10px; border-radius:10px; font-size:.9rem; }
+.btn.ghost{ background:transparent; }
