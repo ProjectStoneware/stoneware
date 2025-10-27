@@ -240,3 +240,11 @@
   .theme-literature .book,
   .theme-literature .modal { border-radius: 14px; }
 }
+/* Quill kill-switch: hide any direct quill-pen.png references */
+.theme-literature img[src$="quill-pen.png"],
+.theme-literature [style*="quill-pen.png"] {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
