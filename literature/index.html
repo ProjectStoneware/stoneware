@@ -1,68 +1,116 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stoneware · Literature</title>
-  <link rel="stylesheet" href="../core/styles.css">
-  <link rel="stylesheet" href="literature.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Stoneware — Literature</title>
+
+  <!-- Base + page theme (keep whatever you already use) -->
+  <link rel="stylesheet" href="../core/styles.css" />
+  <link rel="stylesheet" href="theme.css" />
 </head>
+
 <body class="theme-literature">
-
-  <header class="container">
-    <div class="brand">
-      <h1>Stoneware · Literature</h1>
-    </div>
-
-    <form id="searchForm" autocomplete="off">
-      <input id="q" class="input" type="search" placeholder="Search for books…" />
-      <button class="btn">Search</button>
-      <span id="status" class="status"></span>
-    </form>
-
-    <nav id="shelfTabs" class="tabs">
-      <button class="tab is-active" data-shelf="toRead" aria-selected="true">To Read</button>
-      <button class="tab" data-shelf="reading" aria-selected="false">Reading</button>
-      <button class="tab" data-shelf="finished" aria-selected="false">Finished</button>
-      <button class="tab" data-shelf="abandoned" aria-selected="false">Abandoned</button>
+  <!-- Header: simple and undecorated for now -->
+  <header class="container" style="padding-bottom:0">
+    <nav class="row" style="display:flex;align-items:center;gap:12px">
+      <a class="btn" href="../">← Home</a>
+      <h1 class="title" style="margin:8px 0 0">Literature</h1>
+      <!-- DEV ONLY: quick button to test modal; remove later -->
+      <button class="btn small ghost" id="devOpenModal">Test modal</button>
     </nav>
   </header>
 
+  <!-- Main -->
   <main class="container">
-    <section id="resultsSection">
-      <h2 class="section-title">Search Results</h2>
-      <div id="resultsGrid" class="books-grid"></div>
+    <!-- Search zone (independent) -->
+    <section class="card" aria-labelledby="searchHeading" style="margin-bottom:16px">
+      <h2 id="searchHeading" class="visually-hidden">Search</h2>
+      <form id="searchForm" class="row" role="search">
+        <input id="q" class="input" type="search" placeholder="Search title, author, or ISBN…" aria-label="Search books" style="flex:1;min-width:240px" />
+        <button class="btn" type="submit">Search</button>
+        <span id="status" class="sub" style="margin-left:8px" aria-live="polite"></span>
+      </form>
+      <div id="results" style="margin-top:12px">
+        <div id="resultsGrid" class="books-grid" aria-live="polite"></div>
+      </div>
     </section>
 
-    <section id="shelvesSection">
-      <h2 class="section-title">Your Shelves</h2>
-      <div id="shelfGrid" class="books-grid"></div>
+    <!-- Shelves zone (independent) -->
+    <section class="card" aria-labelledby="shelvesHeading">
+      <h2 id="shelvesHeading" class="visually-hidden">Your Shelves</h2>
+
+      <div id="shelfTabs" class="tabs" role="tablist" aria-label="Shelves">
+        <button class="tab is-active" role="tab" aria-selected="true"  data-shelf="toRead">To Read</button>
+        <button class="tab"          role="tab" aria-selected="false" data-shelf="reading">Reading</button>
+        <button class="tab"          role="tab" aria-selected="false" data-shelf="finished">Finished</button>
+        <button class="tab"          role="tab" aria-selected="false" data-shelf="abandoned">Abandoned</button>
+      </div>
+
+      <div id="shelfGrid" class="books-grid" aria-live="polite"></div>
     </section>
   </main>
 
-  <!-- Details Modal -->
+  <!-- Footer -->
+  <footer class="container" style="opacity:.7;margin-top:12px">
+    <small>© <span id="y"></span> ProjectStoneware · Literature</small>
+  </footer>
+
+  <!-- Details modal (just the contract; body will be filled later) -->
   <div id="modal" class="modal-backdrop" aria-hidden="true">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header>
         <div>
-          <h3 id="modalTitle"></h3>
-          <div id="modalByline" class="byline"></div>
+          <h3 id="modalTitle">Title</h3>
+          <div class="byline" id="modalByline"></div>
         </div>
-        <button id="modalClose" class="close">×</button>
+        <button class="close" id="modalClose" aria-label="Close">✕</button>
       </header>
-      <div id="modalBody" class="body">
-        <p><em>Loading summary…</em></p>
+      <div class="body" id="modalBody">
+        <p><em>Hardcoded test content.</em></p>
       </div>
       <footer>
-        <button id="modalCancel" class="btn ghost">Close</button>
+        <a class="close btn small" id="modalCancel">Close</a>
       </footer>
     </div>
   </div>
 
-  <footer class="container">
-    <p>© <span id="y"></span> Stoneware</p>
-  </footer>
+  <!-- Tiny inline script: year + dev modal opener -->
+  <script>
+    document.getElementById('y').textContent = new Date().getFullYear();
 
-  <script src="books.js"></script>
+    const modal = document.getElementById('modal');
+    const openDev = () => {
+      document.getElementById('modalTitle').textContent = 'Test Title';
+      document.getElementById('modalByline').textContent = 'By Test Author';
+      document.getElementById('modalBody').innerHTML = '<p>This is hardcoded test content.</p>';
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
+    };
+    const closeDev = () => { modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); };
+
+    document.getElementById('devOpenModal').addEventListener('click', openDev);
+    document.getElementById('modalClose').addEventListener('click', closeDev);
+    document.getElementById('modalCancel').addEventListener('click', closeDev);
+    modal.addEventListener('click', e => { if (e.target === modal) closeDev(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDev(); });
+  </script>
+
+  <!-- Keep books.js included; Phase 0 doesn’t rely on it yet -->
+  <script defer src="books.js"></script>
+
+  <noscript>
+    <style>#resultsGrid,#shelfGrid{display:none}</style>
+    <div class="container"><p class="sub">Enable JavaScript to use search, shelves, and ratings.</p></div>
+  </noscript>
+
+  <!-- Utility: visually hidden class -->
+  <style>
+    .visually-hidden{
+      position:absolute!important;width:1px!important;height:1px!important;
+      padding:0!important;margin:-1px!important;overflow:hidden!important;
+      clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important;
+    }
+  </style>
 </body>
 </html>
