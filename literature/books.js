@@ -1,22 +1,27 @@
 /* ============================================================================
-   Stoneware · Literature — Phase 1 (Storage + Shelf Renderer)
-   - Stable contract with index.html (#shelfTabs, #shelfGrid)
-   - LocalStorage helpers: load/save/upsert/move/find/last-shelf
-   - renderShelf(name): paints cards from storage
-   - Tabs: delegated click -> toggle active + remember + render
-   NOTE: Search, details, ratings come later; omitted on purpose for verification.
+   Stoneware · Literature — Phase 1+2
+   Phase 1: Storage + shelf renderer + tab switching (unchanged)
+   Phase 2: Search that NEVER touches shelves
+     - doSearch(q) -> Google Books -> normalize -> renderResults(items)
+     - Result card: cover, title, authors, short blurb, badges, rating slider,
+       Add-to select (UI only for now), Details (opens modal with blurb)
 ============================================================================ */
 
 (function () {
+  // ---------- constants ----------
   const SHELVES = ["toRead", "reading", "finished", "abandoned"];
   const LABEL   = { toRead:"To Read", reading:"Reading", finished:"Finished", abandoned:"Abandoned" };
   const LAST_SHELF_KEY = "books_lastShelf";
+  const API_GB_SEARCH = "https://www.googleapis.com/books/v1/volumes?q=";
 
+  // ---------- tiny utils ----------
   const $  = (s, r=document)=>r.querySelector(s);
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const esc = s => (s ?? "").toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
   const safeJSON = (s, fb)=>{ try { return JSON.parse(s); } catch { return fb; } };
+  const clampQuarter = v => Math.round(Number(v || 0) * 4) / 4;
 
+  // ---------- storage helpers (Phase 1) ----------
   const load = (shelf) => safeJSON(localStorage.getItem("books_"+shelf), []);
   const save = (shelf, arr) => localStorage.setItem("books_"+shelf, JSON.stringify(arr));
 
@@ -52,9 +57,12 @@
   const getLastShelf = () => localStorage.getItem(LAST_SHELF_KEY) || "toRead";
   const setLastShelf = (shelf) => localStorage.setItem(LAST_SHELF_KEY, shelf);
 
-  const shelfGrid = $("#shelfGrid");
+  // ---------- DOM refs ----------
+  const shelfGrid   = $("#shelfGrid");
+  const resultsGrid = $("#resultsGrid");
 
-  function cardHTML(b, shelfName){
+  // ---------- shelf renderer (Phase 1) ----------
+  function cardHTMLShelf(b, shelfName){
     const coverStyle = b.thumbnail
       ? ` style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"`
       : "";
@@ -83,14 +91,12 @@
 
     const items = load(name);
     shelfGrid.innerHTML = items.length
-      ? items.map(b => cardHTML(b, name)).join("")
+      ? items.map(b => cardHTMLShelf(b, name)).join("")
       : `<p class="sub" style="padding:20px;text-align:center">No books on “${LABEL[name]}” yet.</p>`;
   }
 
   function bindTabs(){
-    const tabs = $("#shelfTabs");
-    if (!tabs) return;
-    tabs.addEventListener("click", (e)=>{
+    $("#shelfTabs")?.addEventListener("click", (e)=>{
       const btn = e.target.closest(".tab[data-shelf]");
       if (!btn) return;
       e.preventDefault();
@@ -98,8 +104,121 @@
     });
   }
 
+  // ---------- Phase 2: Search that never touches shelves ----------
+  // Normalize a Google Books item to just what we need for results cards
+  function normalizeGBItem(it){
+    const v = it.volumeInfo || {};
+    const thumb = (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://");
+    return {
+      id: it.id,
+      title: v.title || "Untitled",
+      authors: v.authors || [],
+      thumbnail: thumb || "",
+      description: v.description || "",
+      avg: v.averageRating || 0,
+      count: v.ratingsCount || 0
+    };
+  }
+
+  // Results card (UI only; no saving yet)
+  function cardHTMLResult(b){
+    const coverStyle = b.thumbnail
+      ? ` style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"`
+      : "";
+    const byline = (b.authors || []).join(", ");
+    const blurb  = b.description ? `<p class="notes">${esc(b.description).slice(0,220)}${b.description.length>220?"…":""}</p>` : "";
+    const ratingVal = 0; // UI only in Phase 2
+    return `
+      <article class="book search" data-id="${esc(b.id)}">
+        <div class="cover"${coverStyle}></div>
+        <div class="meta">
+          <h3 class="book-title">${esc(b.title)}</h3>
+          <div class="book-author">${esc(byline)}</div>
+          ${blurb}
+          <div class="badges">
+            <div class="badge">${b.avg ? `${Number(b.avg).toFixed(2)} ★` : "No community rating"}</div>
+          </div>
+          <div class="rating">
+            <label>Rating:
+              <input type="range" min="0" max="5" step="0.25" value="${ratingVal}" disabled title="Ratings wire up in Phase 3">
+            </label>
+          </div>
+          <div class="actions">
+            <label class="btn small" title="Add-to wiring comes in Phase 3">
+              Add to
+              <select disabled style="margin-left:6px">
+                <option>To Read</option>
+                <option>Reading</option>
+                <option>Finished</option>
+                <option>Abandoned</option>
+              </select>
+            </label>
+            <button class="btn small" data-view="${esc(b.id)}">Details</button>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderResults(items){
+    resultsGrid.innerHTML = items.length
+      ? items.map(cardHTMLResult).join("")
+      : `<p class="sub" style="padding:20px;text-align:center">No results.</p>`;
+  }
+
+  async function doSearch(q){
+    const status = $("#status"); if (status) status.textContent = "Searching…";
+    try {
+      const res = await fetch(`${API_GB_SEARCH}${encodeURIComponent(q)}&maxResults=12`);
+      const data = await res.json();
+      const items = (data.items || []).map(normalizeGBItem);
+      renderResults(items);
+      if (status) status.textContent = items.length ? "" : "No results.";
+    } catch(e) {
+      renderResults([]);
+      if (status) status.textContent = "Search failed. Try again.";
+    }
+  }
+
+  // Minimal details viewer (use search blurb only in Phase 2)
+  function openModal(title, byline, bodyHTML){
+    const m = $("#modal"); if (!m) return;
+    $("#modalTitle").textContent = title || "Details";
+    $("#modalByline").textContent = byline || "";
+    $("#modalBody").innerHTML = bodyHTML || "<p><em>No summary available.</em></p>";
+    m.classList.add("show");
+    m.setAttribute("aria-hidden","false");
+    const close = ()=>{ m.classList.remove("show"); m.setAttribute("aria-hidden","true"); };
+    $("#modalClose").onclick = close;
+    $("#modalCancel").onclick = close;
+    m.addEventListener("click", e=>{ if (e.target===m) close(); }, { once:true });
+    document.addEventListener("keydown", e=>{ if (e.key==="Escape") close(); }, { once:true });
+  }
+
+  function bindSearch(){
+    // form submit
+    $("#searchForm")?.addEventListener("submit", (e)=>{
+      e.preventDefault();
+      const q = $("#q")?.value.trim();
+      if (q) doSearch(q);
+    });
+
+    // details click (results only)
+    resultsGrid?.addEventListener("click", (e)=>{
+      const btn = e.target.closest("[data-view]");
+      if (!btn) return;
+      const card = btn.closest("[data-id]");
+      const title   = card.querySelector(".book-title")?.textContent || "Untitled";
+      const authors = card.querySelector(".book-author")?.textContent || "";
+      const notes   = card.querySelector(".notes")?.textContent || "";
+      openModal(title, authors, notes ? `<p>${esc(notes)}</p>` : "<p><em>No summary available.</em></p>");
+    });
+  }
+
+  // ---------- init ----------
   function init(){
-    bindTabs();
+    bindTabs();               // Phase 1
+    bindSearch();             // Phase 2
     renderShelf(getLastShelf());
     const y = document.getElementById("y"); if (y) y.textContent = new Date().getFullYear();
   }
@@ -107,6 +226,6 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  // Dev helpers for Phase-1 manual testing
+  // Dev helpers (Phase 1 verification)
   window.__stone_shelves = { load, save, upsertToShelf, moveBetweenShelves, findBookAnywhere, renderShelf };
 })();
