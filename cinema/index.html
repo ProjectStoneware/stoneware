@@ -3,18 +3,64 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Stoneware · Cinema</title>
+  <title>Stoneware — Cinema</title>
   <link rel="stylesheet" href="../core/styles.css" />
+  <link rel="stylesheet" href="theme.css" />
 </head>
 
 <body>
-  <main class="container center">
-    <section class="card" style="width:min(900px,95vw)">
+  <main class="container">
+    <header style="margin: 40px 0 24px;">
       <h1 class="title">Cinema</h1>
-      <p class="sub">Your personal drive-in. This will house your watched, queued, and abandoned films, complete with IMDb and TMDb data.</p>
+      <p class="sub">Your personal film archive — flickering light, nostalgia, and story.</p>
+    </header>
 
-      <a class="btn" href="../">← Back to Home</a>
-    </section>
+    <div class="tabs">
+      <button class="tab is-active">🎬 Watching</button>
+      <button class="tab">📺 To Watch</button>
+      <button class="tab">✅ Watched</button>
+      <button class="tab">🚫 Dropped</button>
+    </div>
+
+    <div class="films-grid">
+      <article class="film">
+        <div class="poster"></div>
+        <div class="meta">
+          <h2 class="film-title">Rear Window</h2>
+          <div class="film-director">Alfred Hitchcock</div>
+          <div class="badges">
+            <div class="badge">Rating: 4.75 ★</div>
+            <div class="badge">Status: Watched</div>
+          </div>
+          <p class="notes">A voyeur’s moral awakening framed in suspense and shadow.</p>
+          <div class="actions">
+            <button class="btn small">Edit</button>
+            <button class="btn small ghost">Remove</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="film">
+        <div class="poster"></div>
+        <div class="meta">
+          <h2 class="film-title">La La Land</h2>
+          <div class="film-director">Damien Chazelle</div>
+          <div class="badges">
+            <div class="badge">Rating: 4.25 ★</div>
+            <div class="badge">Status: Watching</div>
+          </div>
+          <p class="notes">Dreams in neon — joy and heartbreak choreographed to jazz.</p>
+          <div class="actions">
+            <button class="btn small">Edit</button>
+            <button class="btn small ghost">Remove</button>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div style="margin-top: 40px;">
+      <a href="../index.html" class="btn">← Back to Home</a>
+    </div>
   </main>
 </body>
 </html>
