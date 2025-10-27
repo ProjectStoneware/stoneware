@@ -50,24 +50,6 @@
   letter-spacing: .2px;
 }
 
-/* Quill icon before H1 — no HTML change needed */
-.theme-literature .title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-.theme-literature .title::before {
-  content: "";
-  display: inline-block;
-  width: 28px;
-  height: 28px;
-  background-image: url("../assets/quill-pen.png");
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-  filter: drop-shadow(0 1px 0 rgba(0,0,0,.4));
-}
-
 /* Containers on parchment */
 .theme-literature .card {
   background: linear-gradient(180deg, var(--paper-hi), var(--paper));

@@ -1,90 +1,69 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Stoneware — Literature</title>
-
-  <!-- Shared base + page theme -->
-  <link rel="stylesheet" href="../core/styles.css" />
-  <link rel="stylesheet" href="theme.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stoneware · Literature</title>
+  <link rel="stylesheet" href="../core/styles.css">
+  <link rel="stylesheet" href="literature.css">
 </head>
-
 <body class="theme-literature">
-  <!-- Header -->
-  <header class="container site-header">
-    <div class="titlebar">
-      <img src="../assets/quill-pen.png" class="title-emblem" alt="Quill pen">
-      <h1 class="title" style="margin:0">Literature</h1>
-      <a class="btn backhome" href="../">← Home</a>
+
+  <header class="container">
+    <div class="brand">
+      <img src="../assets/quill-pen.png" alt="Quill pen" class="quill" />
+      <h1>Stoneware · Literature</h1>
     </div>
 
-    <!-- Pinned shelves (sticky) -->
-    <div id="shelfTabs" class="tabs tabs--sticky" role="tablist" aria-label="Shelves">
-      <button class="tab is-active" role="tab" aria-selected="true" data-shelf="toRead"  id="tab-toRead">To Read</button>
-      <button class="tab" role="tab" aria-selected="false" data-shelf="reading" id="tab-reading">Reading</button>
-      <button class="tab" role="tab" aria-selected="false" data-shelf="finished" id="tab-finished">Finished</button>
-      <button class="tab" role="tab" aria-selected="false" data-shelf="abandoned" id="tab-abandoned">Abandoned</button>
-    </div>
+    <form id="searchForm" autocomplete="off">
+      <input id="q" class="input" type="search" placeholder="Search for books…" />
+      <button class="btn">Search</button>
+      <span id="status" class="status"></span>
+    </form>
+
+    <nav id="shelfTabs" class="tabs">
+      <button class="tab is-active" data-shelf="toRead" aria-selected="true">To Read</button>
+      <button class="tab" data-shelf="reading" aria-selected="false">Reading</button>
+      <button class="tab" data-shelf="finished" aria-selected="false">Finished</button>
+      <button class="tab" data-shelf="abandoned" aria-selected="false">Abandoned</button>
+    </nav>
   </header>
 
-  <!-- Main content -->
-  <main class="container main-content">
-
-    <!-- Search (independent of shelves) -->
-    <section class="card" aria-labelledby="searchHeading" style="margin-bottom:16px">
-      <h2 id="searchHeading" class="visually-hidden">Search</h2>
-      <form id="searchForm" class="row" role="search">
-        <input id="q" class="input" type="search" placeholder="Search title, author, or ISBN…" aria-label="Search books" style="flex:1;min-width:240px" />
-        <button class="btn" type="submit">Search</button>
-        <span id="status" class="sub" style="margin-left:8px" aria-live="polite"></span>
-      </form>
-
-      <div id="results" style="margin-top:12px">
-        <div id="resultsGrid" class="books-grid" data-mode="search" aria-live="polite"></div>
-      </div>
+  <main class="container">
+    <section id="resultsSection">
+      <h2 class="section-title">Search Results</h2>
+      <div id="resultsGrid" class="books-grid"></div>
     </section>
 
-    <!-- Your Shelves -->
-    <section class="card" aria-labelledby="shelvesHeading">
-      <h2 id="shelvesHeading" class="visually-hidden">Your Shelves</h2>
-      <div id="shelfGrid" class="books-grid" data-mode="shelf" aria-live="polite"></div>
+    <section id="shelvesSection">
+      <h2 class="section-title">Your Shelves</h2>
+      <div id="shelfGrid" class="books-grid"></div>
     </section>
   </main>
 
-  <!-- Footer -->
-  <footer class="container" style="opacity:.7;margin-top:12px">
-    <small>© <span id="y"></span> ProjectStoneware · Literature</small>
-  </footer>
-
-  <!-- Details modal -->
+  <!-- Details Modal -->
   <div id="modal" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
       <header>
         <div>
-          <h3 id="modalTitle">Title</h3>
-          <div class="byline" id="modalByline"></div>
+          <h3 id="modalTitle"></h3>
+          <div id="modalByline" class="byline"></div>
         </div>
-        <button class="close" id="modalClose" aria-label="Close">✕</button>
+        <button id="modalClose" class="close">×</button>
       </header>
-      <div class="body" id="modalBody"><p><em>Fetching details…</em></p></div>
+      <div id="modalBody" class="body">
+        <p><em>Loading summary…</em></p>
+      </div>
       <footer>
-        <a class="close btn small" id="modalCancel">Close</a>
+        <button id="modalCancel" class="btn ghost">Close</button>
       </footer>
     </div>
   </div>
 
-  <!-- Year and main logic -->
-  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
-  <script defer src="books.js"></script>
+  <footer class="container">
+    <p>© <span id="y"></span> Stoneware</p>
+  </footer>
 
-  <!-- Visually hidden utility -->
-  <style>
-    .visually-hidden{
-      position:absolute!important; width:1px!important; height:1px!important;
-      padding:0!important; margin:-1px!important; overflow:hidden!important;
-      clip:rect(0 0 0 0)!important; white-space:nowrap!important; border:0!important;
-    }
-  </style>
+  <script src="books.js"></script>
 </body>
 </html>
