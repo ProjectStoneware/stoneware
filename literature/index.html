@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Stoneware — Literature</title>
 
-  <!-- Base + page theme (keep whatever you already use) -->
+  <!-- Base + page theme -->
   <link rel="stylesheet" href="../core/styles.css" />
   <link rel="stylesheet" href="theme.css" />
 </head>
 
 <body class="theme-literature">
-  <!-- Header: simple and undecorated for now -->
+  <!-- Header -->
   <header class="container" style="padding-bottom:0">
     <nav class="row" style="display:flex;align-items:center;gap:12px">
       <a class="btn" href="../">← Home</a>
       <h1 class="title" style="margin:8px 0 0">Literature</h1>
-</nav>
+    </nav>
   </header>
 
   <!-- Main -->
@@ -54,7 +54,7 @@
     <small>© <span id="y"></span> ProjectStoneware · Literature</small>
   </footer>
 
-  <!-- Details modal (just the contract; body will be filled later) -->
+  <!-- Details modal (contract only; JS fills body) -->
   <div id="modal" class="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header>
@@ -64,16 +64,13 @@
         </div>
         <button class="close" id="modalClose" aria-label="Close">✕</button>
       </header>
-      <div class="body" id="modalBody">
-        <p><em>Hardcoded test content.</em></p>
-      </div>
+      <div class="body" id="modalBody"><!-- summary goes here --></div>
       <footer>
         <a class="close btn small" id="modalCancel">Close</a>
       </footer>
     </div>
   </div>
 
-  <!-- Keep books.js included; Phase 0 doesn’t rely on it yet -->
   <script defer src="books.js"></script>
 
   <noscript>
@@ -89,5 +86,8 @@
       clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important;
     }
   </style>
+  <script>
+    const y = document.getElementById('y'); if (y) y.textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>

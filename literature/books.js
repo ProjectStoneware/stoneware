@@ -1,9 +1,10 @@
 /* ============================================================================
-   Stoneware · Literature — Phases 1–4
+   Stoneware · Literature — Phases 1–4 (hardened)
    - Phase 1: storage + shelf renderer + tab switching
    - Phase 2: search (doesn't touch shelves)
    - Phase 3: Add / Move / Remove
    - Phase 4: Ratings that stick (quarter-step; search→Finished if unsaved)
+   - Fix: null-safe storage + seeding empty arrays on first load
 ============================================================================ */
 
 (function () {
@@ -20,12 +21,30 @@
   const $  = (s, r=document)=>r.querySelector(s);
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const esc = s => (s ?? "").toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-  const safeJSON = (s, fb)=>{ try { return JSON.parse(s); } catch { return fb; } };
   const clampQuarter = v => Math.round(Number(v||0) * 4) / 4;
 
+  // Return fallback when input is null/undefined/""
+  function safeJSON(s, fb){
+    if (s === null || s === undefined || s === "") return fb;
+    try { return JSON.parse(s); } catch { return fb; }
+  }
+
   // ---------------- Storage helpers (Phase 1)
-  const load = (shelf) => safeJSON(localStorage.getItem("books_"+shelf), []);
-  const save = (shelf, arr) => localStorage.setItem("books_"+shelf, JSON.stringify(arr));
+  function load(shelf){
+    const raw = localStorage.getItem("books_"+shelf);
+    const arr = safeJSON(raw, []);
+    return Array.isArray(arr) ? arr : [];
+  }
+  function save(shelf, arr){
+    localStorage.setItem("books_"+shelf, JSON.stringify(Array.isArray(arr) ? arr : []));
+  }
+  function ensureShelfKeys(){
+    SHELVES.forEach(s=>{
+      if (localStorage.getItem("books_"+s) === null) {
+        localStorage.setItem("books_"+s, "[]");
+      }
+    });
+  }
 
   function upsertToShelf(shelf, book){
     const list = load(shelf);
@@ -148,8 +167,9 @@
     });
 
     const items = load(name);
-    shelfGrid.innerHTML = items.length
-      ? items.map(b => shelfCardHTML(b, name)).join("")
+    const list = Array.isArray(items) ? items : [];
+    shelfGrid.innerHTML = list.length
+      ? list.map(b => shelfCardHTML(b, name)).join("")
       : `<p class="sub" style="padding:20px;text-align:center">No books on “${LABEL[name]}” yet.</p>`;
   }
 
@@ -264,9 +284,7 @@
       const description = card.querySelector(".notes")?.textContent || "";
 
       upsertToShelf(dest, { id, title, authors, description, rating: 0 });
-      // tiny inline acknowledgement
       sel.blur();
-      // If user is on that shelf, re-render it
       if (getLastShelf() === dest) renderShelf(dest);
     });
 
@@ -278,20 +296,28 @@
       const id = slider.getAttribute("data-rate");
       const v  = clampQuarter(slider.value);
 
-      // update the visible output on the card
       const out = slider.closest(".meta")?.querySelector("[data-out]");
       if (out) out.textContent = v ? v.toFixed(2).replace(/\.00$/,"") : "No rating";
 
-      // if already saved somewhere, update in place
       const where = findBookAnywhere(id);
       if (where.book) {
         upsertToShelf(where.shelf, { ...where.book, rating: v });
         if (getLastShelf() === where.shelf) renderShelf(where.shelf);
       } else {
-        // not saved → auto-file to Finished with metadata enrichment
         const card = slider.closest("[data-id]");
         saveRatingFromSearch(id, card, v);
       }
+    });
+
+    // Details (opens modal with whatever we have; LLM/OL hook comes later)
+    resultsGrid.addEventListener("click", (e)=>{
+      const btn = e.target.closest("[data-view]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-view");
+      const card = btn.closest("[data-id]");
+      const title = card.querySelector(".book-title")?.textContent || "Untitled";
+      const by    = card.querySelector(".book-author")?.textContent || "";
+      openModal(title, by, "<p><em>Loading summary…</em></p>");
     });
   }
 
@@ -306,17 +332,29 @@
       const to   = sel.value;
       const from = sel.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
       moveBetweenShelves(from, to, id);
-      renderShelf(from); // keep current view
+      renderShelf(from); // keep current tab
     });
 
     // Phase 3: Remove
     shelfGrid.addEventListener("click", (e)=>{
       const rem = e.target.closest("[data-remove]");
-      if (!rem) return;
-      const id = rem.getAttribute("data-remove");
-      const shelf = rem.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
-      save(shelf, load(shelf).filter(x => x.id !== id));
-      renderShelf(shelf);
+      if (rem){
+        const id = rem.getAttribute("data-remove");
+        const shelf = rem.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
+        save(shelf, load(shelf).filter(x => x.id !== id));
+        renderShelf(shelf);
+      }
+
+      // Details from shelf card
+      const view = e.target.closest("[data-view]");
+      if (view){
+        const id = view.getAttribute("data-view");
+        const found = findBookAnywhere(id).book;
+        const title = found?.title || "Details";
+        const by    = (found?.authors || []).join(", ");
+        const desc  = found?.description || "";
+        openModal(title, by, desc ? `<p>${esc(desc).replace(/\n{2,}/g,"<br><br>")}</p>` : "<p><em>No summary available.</em></p>");
+      }
     });
 
     // Phase 4: Rating on saved items
@@ -337,7 +375,23 @@
     });
   }
 
+  // ---------------- Modal helpers (basic)
+  function openModal(title, byline, html){
+    const m = $("#modal"); if (!m) return;
+    $("#modalTitle").textContent = title || "Untitled";
+    $("#modalByline").textContent = byline || "";
+    $("#modalBody").innerHTML = html || "<p><em>No summary available.</em></p>";
+    m.classList.add("show"); m.setAttribute("aria-hidden","false");
+
+    const close = ()=>{ m.classList.remove("show"); m.setAttribute("aria-hidden","true"); };
+    $("#modalClose").onclick = close; $("#modalCancel").onclick = close;
+    m.addEventListener("click", e=>{ if(e.target===m) close(); }, { once:true });
+    document.addEventListener("keydown", e=>{ if(e.key==="Escape") close(); }, { once:true });
+  }
+
+  // ---------------- Init
   function init(){
+    ensureShelfKeys();
     bindTabs();
     bindSearch();
     bindResultsGrid();
