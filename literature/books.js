@@ -1,27 +1,29 @@
 /* ============================================================================
-   Stoneware · Literature — Phase 3 (Add/Move/Remove)
-   - Phase 1: storage + shelf renderer (kept)
-   - Phase 2: search results (kept)
-   - Phase 3: add/move/remove mechanics wired
+   Stoneware · Literature — Phases 1–4
+   - Phase 1: storage + shelf renderer + tab switching
+   - Phase 2: search (doesn't touch shelves)
+   - Phase 3: Add / Move / Remove
+   - Phase 4: Ratings that stick (quarter-step; search→Finished if unsaved)
 ============================================================================ */
 
 (function () {
-  // ---------- constants ----------
+  // ---------------- Constants
   const SHELVES = ["toRead", "reading", "finished", "abandoned"];
   const LABEL   = { toRead:"To Read", reading:"Reading", finished:"Finished", abandoned:"Abandoned" };
   const LAST_SHELF_KEY = "books_lastShelf";
 
-  // Google Books endpoints
+  // Google Books
   const API_GB_SEARCH = "https://www.googleapis.com/books/v1/volumes?q=";
   const API_GB_VOL    = "https://www.googleapis.com/books/v1/volumes/"; // + id
 
-  // ---------- tiny utils ----------
+  // ---------------- Tiny utils
   const $  = (s, r=document)=>r.querySelector(s);
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const esc = s => (s ?? "").toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
   const safeJSON = (s, fb)=>{ try { return JSON.parse(s); } catch { return fb; } };
+  const clampQuarter = v => Math.round(Number(v||0) * 4) / 4;
 
-  // ---------- storage helpers ----------
+  // ---------------- Storage helpers (Phase 1)
   const load = (shelf) => safeJSON(localStorage.getItem("books_"+shelf), []);
   const save = (shelf, arr) => localStorage.setItem("books_"+shelf, JSON.stringify(arr));
 
@@ -57,110 +59,80 @@
   const getLastShelf = () => localStorage.getItem(LAST_SHELF_KEY) || "toRead";
   const setLastShelf = (shelf) => localStorage.setItem(LAST_SHELF_KEY, shelf);
 
-  // ---------- normalization helpers ----------
-  function extractISBNs(volumeInfo){
-    const ids = volumeInfo?.industryIdentifiers || [];
-    const byType = {};
-    ids.forEach(x => { if (x?.type && x?.identifier) byType[x.type] = x.identifier.replace(/-/g,""); });
-    return { isbn13: byType.ISBN_13 || null, isbn10: byType.ISBN_10 || null };
-  }
-
-  function normalizeSearchItem(it){
-    const v = it.volumeInfo || {};
-    const { isbn13, isbn10 } = extractISBNs(v);
-    return {
-      id: it.id,
-      title: v.title || "Untitled",
-      authors: v.authors || [],
-      thumbnail: (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://"),
-      description: v.description || "",
-      avg: v.averageRating || 0,
-      count: v.ratingsCount || 0,
-      isbn13, isbn10,
-      rating: 0,
-      status: "toRead",
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-  }
-
-  async function fetchGBVolume(id){
-    const res = await fetch(`${API_GB_VOL}${encodeURIComponent(id)}`);
-    if (!res.ok) throw new Error("gb");
-    const json = await res.json();
-    const v = json.volumeInfo || {};
-    const { isbn13, isbn10 } = extractISBNs(v);
-    return {
-      id,
-      title: v.title || "Untitled",
-      authors: v.authors || [],
-      thumbnail: (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://"),
-      description: v.description || "",
-      avg: v.averageRating || 0,
-      count: v.ratingsCount || 0,
-      isbn13, isbn10,
-      rating: 0,
-      status: "toRead",
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-  }
-
-  // ---------- DOM targets ----------
+  // ---------------- Renderers (Phases 1–2)
   const resultsGrid = $("#resultsGrid");
   const shelfGrid   = $("#shelfGrid");
 
-  // ---------- rendering ----------
   const shelfOptions = (selected) =>
     SHELVES.map(k=>`<option value="${k}" ${k===selected?"selected":""}>${LABEL[k]}</option>`).join("");
 
-  function cardHTML_forShelf(b, shelfName){
+  function shelfCardHTML(b, shelfName){
     const coverStyle = b.thumbnail
       ? ` style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"`
       : "";
     const byline = (b.authors || []).join(", ");
-    const desc = b.description ? `<p class="notes">${esc(b.description).slice(0,160)}${b.description.length>160?"…":""}</p>` : "";
+    const ratingOut = (b.rating ? b.rating.toFixed(2).replace(/\.00$/,"") : "No rating");
     return `
       <article class="book shelf" data-id="${esc(b.id)}" data-shelf="${esc(shelfName)}">
         <div class="cover"${coverStyle}></div>
         <div class="meta">
           <h3 class="book-title">${esc(b.title || "Untitled")}</h3>
           <div class="book-author">${esc(byline)}</div>
-          <div class="badges"><div class="badge">${LABEL[shelfName]}</div></div>
-          ${desc}
-          <div class="actions" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+          <div class="badges">
+            <div class="badge">${LABEL[shelfName]}</div>
+            <div class="badge"><output data-out>${ratingOut}</output> ★</div>
+          </div>
+
+          <div class="rating">
+            <label>Rating:
+              <input type="range" min="0" max="5" step="0.25" value="${esc(b.rating||0)}" data-rate="${esc(b.id)}" />
+            </label>
+          </div>
+
+          <div class="actions">
             <label class="btn small ghost">Move to
               <select data-move="${esc(b.id)}" style="margin-left:6px">${shelfOptions(shelfName)}</select>
             </label>
             <button class="btn small ghost" data-remove="${esc(b.id)}">Remove</button>
+            <button class="btn small" data-view="${esc(b.id)}">Details</button>
           </div>
         </div>
       </article>
     `;
   }
 
-  function cardHTML_forSearch(b){
+  function resultCardHTML(b){
     const coverStyle = b.thumbnail
       ? ` style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"`
       : "";
     const byline = (b.authors || []).join(", ");
-    const desc = b.description ? `<p class="notes">${esc(b.description).slice(0,220)}${b.description.length>220?"…":""}</p>` : "";
     return `
       <article class="book search" data-id="${esc(b.id)}">
         <div class="cover"${coverStyle}></div>
         <div class="meta">
           <h3 class="book-title">${esc(b.title || "Untitled")}</h3>
           <div class="book-author">${esc(byline)}</div>
-          ${desc}
-          <div class="badges"><div class="badge">Search result</div></div>
-          <div class="actions" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+          ${b.description ? `<p class="notes">${esc(b.description).slice(0,180)}${b.description.length>180?"…":""}</p>` : ""}
+
+          <div class="badges">
+            <div class="badge">Search result</div>
+            <div class="badge"><output data-out>No rating</output> ★</div>
+          </div>
+
+          <div class="rating">
+            <label>Rating:
+              <input type="range" min="0" max="5" step="0.25" value="0" data-rate="${esc(b.id)}" />
+            </label>
+          </div>
+
+          <div class="actions">
             <label class="btn small">Add to
               <select data-add="${esc(b.id)}" style="margin-left:6px">
                 <option value="" selected disabled>Select shelf…</option>
                 ${shelfOptions("toRead")}
               </select>
             </label>
-            <span class="saved-note" style="display:none;color:#6e5a3e;font-size:.9rem;">Saved</span>
+            <button class="btn small" data-view="${esc(b.id)}">Details</button>
           </div>
         </div>
       </article>
@@ -177,32 +149,85 @@
 
     const items = load(name);
     shelfGrid.innerHTML = items.length
-      ? items.map(b => cardHTML_forShelf(b, name)).join("")
+      ? items.map(b => shelfCardHTML(b, name)).join("")
       : `<p class="sub" style="padding:20px;text-align:center">No books on “${LABEL[name]}” yet.</p>`;
   }
 
   function renderResults(items){
     resultsGrid.innerHTML = items.length
-      ? items.map(cardHTML_forSearch).join("")
+      ? items.map(resultCardHTML).join("")
       : `<p class="sub" style="padding:20px;text-align:center">No results.</p>`;
   }
 
-  // ---------- search (Phase 2 kept) ----------
+  // ---------------- Search (Phase 2)
   async function doSearch(q){
     const status = $("#status"); if (status) status.textContent = "Searching…";
     try{
       const res = await fetch(`${API_GB_SEARCH}${encodeURIComponent(q)}&maxResults=12`);
       const data = await res.json();
-      const items = (data.items || []).map(normalizeSearchItem);
+      const items = (data.items||[]).map(it=>{
+        const v = it.volumeInfo || {};
+        return {
+          id: it.id,
+          title: v.title || "Untitled",
+          authors: v.authors || [],
+          thumbnail: (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://"),
+          description: v.description || "",
+          rating: 0
+        };
+      });
       renderResults(items);
-      if (status) status.textContent = items.length ? "" : "No results.";
+      if (status) status.textContent = "";
     }catch{
       if (status) status.textContent = "Search failed. Try again.";
       renderResults([]);
     }
   }
 
-  // ---------- wire up ----------
+  // ---------------- Phase 4 helpers: enrich + save rating from SEARCH
+  async function saveRatingFromSearch(id, card, value){
+    const vClamped = clampQuarter(value);
+
+    // Try to enrich from Google Books volume so Finished has decent metadata
+    let book;
+    try{
+      const res = await fetch(API_GB_VOL + encodeURIComponent(id));
+      if (!res.ok) throw new Error("gb");
+      const vol = await res.json();
+      const vi = vol.volumeInfo || {};
+      book = {
+        id,
+        title: vi.title || card.querySelector(".book-title")?.textContent || "Untitled",
+        authors: vi.authors || (card.querySelector(".book-author")?.textContent.split(",").map(s=>s.trim())||[]),
+        thumbnail: (vi.imageLinks?.thumbnail || vi.imageLinks?.smallThumbnail || "").replace("http://","https://"),
+        description: vi.description || "",
+        rating: vClamped,
+        status: "finished",
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+    } catch {
+      // Fallback minimal record
+      book = {
+        id,
+        title: card.querySelector(".book-title")?.textContent || "Untitled",
+        authors: (card.querySelector(".book-author")?.textContent || "").split(",").map(s=>s.trim()).filter(Boolean),
+        thumbnail: "",
+        description: "",
+        rating: vClamped,
+        status: "finished",
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+    }
+
+    upsertToShelf("finished", book);
+
+    // If user is looking at Finished, reflect immediately
+    if (getLastShelf() === "finished") renderShelf("finished");
+  }
+
+  // ---------------- Wire-up (Phases 1–4)
   function bindTabs(){
     const tabs = $("#shelfTabs");
     if (!tabs) return;
@@ -223,63 +248,92 @@
   }
 
   function bindResultsGrid(){
-    // Add-to (Phase 3)
-    resultsGrid?.addEventListener("change", async (e)=>{
+    if (!resultsGrid) return;
+
+    // Phase 3: Add to shelf
+    resultsGrid.addEventListener("change", (e)=>{
       const sel = e.target.closest("select[data-add]");
       if (!sel) return;
       const dest = sel.value;
       if (!dest) return;
-      const id   = sel.getAttribute("data-add");
+
       const card = sel.closest("[data-id]");
-      // enrich with full volume so shelves get nice metadata
-      let book;
-      try {
-        book = await fetchGBVolume(id);
-      } catch {
-        // fallback: pull minimal from DOM
-        const title   = card.querySelector(".book-title")?.textContent || "Untitled";
-        const authors = (card.querySelector(".book-author")?.textContent || "")
-                          .split(",").map(s=>s.trim()).filter(Boolean);
-        book = { id, title, authors, thumbnail:"", description:"", avg:0, count:0, rating:0, status:dest, createdAt:Date.now(), updatedAt:Date.now() };
-      }
-      upsertToShelf(dest, { ...book, status: dest, rating: book.rating ?? 0 });
+      const id   = sel.getAttribute("data-add");
+      const title   = card.querySelector(".book-title")?.textContent || "Untitled";
+      const authors = (card.querySelector(".book-author")?.textContent || "").split(",").map(s=>s.trim()).filter(Boolean);
+      const description = card.querySelector(".notes")?.textContent || "";
 
-      // tiny inline toast “Saved to X”
-      const note = card.querySelector(".saved-note");
-      if (note) {
-        note.textContent = `Saved to ${LABEL[dest]}`;
-        note.style.display = "inline";
-        setTimeout(()=>{ note.style.display = "none"; }, 1400);
-      }
-
-      // keep user on current shelf; just ensure tab highlight remains correct
-      renderShelf(getLastShelf());
+      upsertToShelf(dest, { id, title, authors, description, rating: 0 });
+      // tiny inline acknowledgement
       sel.blur();
+      // If user is on that shelf, re-render it
+      if (getLastShelf() === dest) renderShelf(dest);
+    });
+
+    // Phase 4: Rating from SEARCH
+    resultsGrid.addEventListener("input", (e)=>{
+      const slider = e.target.closest('input[type="range"][data-rate]');
+      if (!slider) return;
+
+      const id = slider.getAttribute("data-rate");
+      const v  = clampQuarter(slider.value);
+
+      // update the visible output on the card
+      const out = slider.closest(".meta")?.querySelector("[data-out]");
+      if (out) out.textContent = v ? v.toFixed(2).replace(/\.00$/,"") : "No rating";
+
+      // if already saved somewhere, update in place
+      const where = findBookAnywhere(id);
+      if (where.book) {
+        upsertToShelf(where.shelf, { ...where.book, rating: v });
+        if (getLastShelf() === where.shelf) renderShelf(where.shelf);
+      } else {
+        // not saved → auto-file to Finished with metadata enrichment
+        const card = slider.closest("[data-id]");
+        saveRatingFromSearch(id, card, v);
+      }
     });
   }
 
   function bindShelfGrid(){
-    // Move between shelves
-    shelfGrid?.addEventListener("change", (e)=>{
+    if (!shelfGrid) return;
+
+    // Phase 3: Move
+    shelfGrid.addEventListener("change", (e)=>{
       const sel = e.target.closest("select[data-move]");
       if (!sel) return;
       const id   = sel.getAttribute("data-move");
       const to   = sel.value;
       const from = sel.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
       moveBetweenShelves(from, to, id);
-      // Stay on current shelf tab; just re-render it
-      renderShelf(from);
+      renderShelf(from); // keep current view
     });
 
-    // Remove from this shelf only
-    shelfGrid?.addEventListener("click", (e)=>{
-      const btn = e.target.closest("[data-remove]");
-      if (!btn) return;
-      const id = btn.getAttribute("data-remove");
-      const from = btn.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
-      const filtered = load(from).filter(b => b.id !== id);
-      save(from, filtered);
-      renderShelf(from);
+    // Phase 3: Remove
+    shelfGrid.addEventListener("click", (e)=>{
+      const rem = e.target.closest("[data-remove]");
+      if (!rem) return;
+      const id = rem.getAttribute("data-remove");
+      const shelf = rem.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
+      save(shelf, load(shelf).filter(x => x.id !== id));
+      renderShelf(shelf);
+    });
+
+    // Phase 4: Rating on saved items
+    shelfGrid.addEventListener("input", (e)=>{
+      const slider = e.target.closest('input[type="range"][data-rate]');
+      if (!slider) return;
+      const id = slider.getAttribute("data-rate");
+      const v  = clampQuarter(slider.value);
+
+      const out = slider.closest(".meta")?.querySelector("[data-out]");
+      if (out) out.textContent = v ? v.toFixed(2).replace(/\.00$/,"") : "No rating";
+
+      const where = findBookAnywhere(id);
+      if (where.book) {
+        upsertToShelf(where.shelf, { ...where.book, rating: v });
+        if (getLastShelf() === where.shelf) renderShelf(where.shelf);
+      }
     });
   }
 
@@ -289,12 +343,13 @@
     bindResultsGrid();
     bindShelfGrid();
     renderShelf(getLastShelf());
+
     const y = document.getElementById("y"); if (y) y.textContent = new Date().getFullYear();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  // Dev surface (still handy)
-  window.__stone_shelves = { load, save, upsertToShelf, moveBetweenShelves, findBookAnywhere, renderShelf };
+  // Dev helpers
+  window.__stone_shelves = { load, save, upsertToShelf, moveBetweenShelves, findBookAnywhere, renderShelf, doSearch };
 })();
