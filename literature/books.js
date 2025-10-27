@@ -542,3 +542,84 @@
   // Stamp year
   var y = document.getElementById("y"); if (y) y.textContent = new Date().getFullYear();
 })();
+/* ---- Stoneware shelves: minimal tab switching + render (step 1) ---- */
+(function(){
+  // Namespace to avoid collisions if this file already defines similar functions.
+  var NS = window._StonewareShelvesV1 = window._StonewareShelvesV1 || {};
+
+  if (NS._wired) return; // prevent double-wiring on hot reloads
+  NS._wired = true;
+
+  var SHELVES = ["toRead", "reading", "finished", "abandoned"];
+  var LABEL   = { toRead:"To Read", reading:"Reading", finished:"Finished", abandoned:"Abandoned" };
+
+  // Storage helpers (scoped)
+  function safeJSON(s,f){ try { return JSON.parse(s); } catch(e){ return f; } }
+  function load(shelf){ return safeJSON(localStorage.getItem("books_"+shelf), []); }
+  function save(shelf, data){ localStorage.setItem("books_"+shelf, JSON.stringify(data)); }
+
+  // Ensure keys exist
+  SHELVES.forEach(function(s){ if (!localStorage.getItem("books_"+s)) save(s, []); });
+
+  // Cheap esc for HTML
+  function esc(s){ s = (s==null?"":String(s)); return s.replace(/[&<>"']/g, function(m){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);}); }
+
+  var shelfGrid  = document.getElementById("shelfGrid");
+  var tabsWrap   = document.getElementById("shelfTabs");
+  var current    = localStorage.getItem("books_currentShelf") || "toRead";
+
+  function bookCardHTML(b, shelfName){
+    var coverStyle = b.thumbnail ? ' style="background-image:url(\''+esc(b.thumbnail)+'\');background-size:cover;background-position:center;"' : "";
+    var ratingText = (typeof b.rating === "number" && b.rating>0) ? String(b.rating.toFixed(2)).replace(/\.00$/,"") : "No rating";
+    return ''+
+      '<article class="book shelf" data-id="'+esc(b.id)+'" data-shelf="'+esc(shelfName)+'">'+
+        '<div class="cover"'+coverStyle+'></div>'+
+        '<div class="meta">'+
+          '<h3 class="book-title">'+esc(b.title||"Untitled")+'</h3>'+
+          '<div class="book-author">'+esc((b.authors||[]).join(", "))+'</div>'+
+          '<div class="badges">'+
+            '<div class="badge">'+LABEL[shelfName]+'</div>'+
+            '<div class="badge"><output>'+ratingText+'</output> ★</div>'+
+          '</div>'+
+        '</div>'+
+      '</article>';
+  }
+
+  function renderShelf(name){
+    current = name;
+    localStorage.setItem("books_currentShelf", name);
+
+    // toggle active tab styling
+    if (tabsWrap){
+      Array.prototype.forEach.call(tabsWrap.querySelectorAll(".tab"), function(t){
+        var active = t.getAttribute("data-shelf") === name;
+        t.classList.toggle("is-active", active);
+        t.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    }
+
+    if (!shelfGrid) return;
+    var items = load(name);
+    if (!items.length){
+      shelfGrid.innerHTML = '<p class="sub" style="padding:20px;text-align:center">No books on “'+LABEL[name]+'”.</p>';
+      return;
+    }
+    // newest first
+    items.sort(function(a,b){ return (b.updatedAt||b.createdAt||0) - (a.updatedAt||a.createdAt||0); });
+    shelfGrid.innerHTML = items.map(function(b){ return bookCardHTML(b, name); }).join("");
+  }
+
+  // Wire tab clicks (delegation)
+  if (tabsWrap && !NS._tabsWired){
+    tabsWrap.addEventListener("click", function(e){
+      var btn = e.target.closest(".tab[data-shelf]");
+      if (!btn) return;
+      e.preventDefault();
+      renderShelf(btn.getAttribute("data-shelf"));
+    });
+    NS._tabsWired = true;
+  }
+
+  // Initial render
+  renderShelf(current);
+})();
