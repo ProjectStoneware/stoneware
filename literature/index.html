@@ -16,9 +16,7 @@
     <nav class="row" style="display:flex;align-items:center;gap:12px">
       <a class="btn" href="../">← Home</a>
       <h1 class="title" style="margin:8px 0 0">Literature</h1>
-      <!-- DEV ONLY: quick button to test modal; remove later -->
-      <button class="btn small ghost" id="devOpenModal">Test modal</button>
-    </nav>
+</nav>
   </header>
 
   <!-- Main -->
@@ -74,27 +72,6 @@
       </footer>
     </div>
   </div>
-
-  <!-- Tiny inline script: year + dev modal opener -->
-  <script>
-    document.getElementById('y').textContent = new Date().getFullYear();
-
-    const modal = document.getElementById('modal');
-    const openDev = () => {
-      document.getElementById('modalTitle').textContent = 'Test Title';
-      document.getElementById('modalByline').textContent = 'By Test Author';
-      document.getElementById('modalBody').innerHTML = '<p>This is hardcoded test content.</p>';
-      modal.classList.add('show');
-      modal.setAttribute('aria-hidden', 'false');
-    };
-    const closeDev = () => { modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); };
-
-    document.getElementById('devOpenModal').addEventListener('click', openDev);
-    document.getElementById('modalClose').addEventListener('click', closeDev);
-    document.getElementById('modalCancel').addEventListener('click', closeDev);
-    modal.addEventListener('click', e => { if (e.target === modal) closeDev(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDev(); });
-  </script>
 
   <!-- Keep books.js included; Phase 0 doesn’t rely on it yet -->
   <script defer src="books.js"></script>
