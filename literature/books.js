@@ -1,10 +1,10 @@
 /* ============================================================================
-   Stoneware · Literature — Phases 1–4 (hardened)
+   Stoneware · Literature — Phases 1–4 (finalized)
    - Phase 1: storage + shelf renderer + tab switching
    - Phase 2: search (doesn't touch shelves)
-   - Phase 3: Add / Move / Remove
+   - Phase 3: Add / Move / Remove (with GB volume enrichment on "Add to")
    - Phase 4: Ratings that stick (quarter-step; search→Finished if unsaved)
-   - Fix: null-safe storage + seeding empty arrays on first load
+   - Hardened: null-safe storage + seed empty arrays on first load
 ============================================================================ */
 
 (function () {
@@ -23,13 +23,12 @@
   const esc = s => (s ?? "").toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
   const clampQuarter = v => Math.round(Number(v||0) * 4) / 4;
 
-  // Return fallback when input is null/undefined/""
   function safeJSON(s, fb){
     if (s === null || s === undefined || s === "") return fb;
     try { return JSON.parse(s); } catch { return fb; }
   }
 
-  // ---------------- Storage helpers (Phase 1)
+  // ---------------- Storage helpers
   function load(shelf){
     const raw = localStorage.getItem("books_"+shelf);
     const arr = safeJSON(raw, []);
@@ -78,12 +77,13 @@
   const getLastShelf = () => localStorage.getItem(LAST_SHELF_KEY) || "toRead";
   const setLastShelf = (shelf) => localStorage.setItem(LAST_SHELF_KEY, shelf);
 
-  // ---------------- Renderers (Phases 1–2)
+  // ---------------- Renderers
   const resultsGrid = $("#resultsGrid");
   const shelfGrid   = $("#shelfGrid");
 
+  // Build options; if selected is undefined/null, nothing is preselected
   const shelfOptions = (selected) =>
-    SHELVES.map(k=>`<option value="${k}" ${k===selected?"selected":""}>${LABEL[k]}</option>`).join("");
+    SHELVES.map(k=>`<option value="${k}" ${selected===k?"selected":""}>${LABEL[k]}</option>`).join("");
 
   function shelfCardHTML(b, shelfName){
     const coverStyle = b.thumbnail
@@ -148,7 +148,7 @@
             <label class="btn small">Add to
               <select data-add="${esc(b.id)}" style="margin-left:6px">
                 <option value="" selected disabled>Select shelf…</option>
-                ${shelfOptions("toRead")}
+                ${shelfOptions(undefined)}  <!-- no preselected shelf -->
               </select>
             </label>
             <button class="btn small" data-view="${esc(b.id)}">Details</button>
@@ -204,11 +204,10 @@
     }
   }
 
-  // ---------------- Phase 4 helpers: enrich + save rating from SEARCH
+  // ---------------- Phase 4: enrich + auto-file rating from SEARCH
   async function saveRatingFromSearch(id, card, value){
     const vClamped = clampQuarter(value);
 
-    // Try to enrich from Google Books volume so Finished has decent metadata
     let book;
     try{
       const res = await fetch(API_GB_VOL + encodeURIComponent(id));
@@ -242,12 +241,10 @@
     }
 
     upsertToShelf("finished", book);
-
-    // If user is looking at Finished, reflect immediately
     if (getLastShelf() === "finished") renderShelf("finished");
   }
 
-  // ---------------- Wire-up (Phases 1–4)
+  // ---------------- Wire-up
   function bindTabs(){
     const tabs = $("#shelfTabs");
     if (!tabs) return;
@@ -270,8 +267,8 @@
   function bindResultsGrid(){
     if (!resultsGrid) return;
 
-    // Phase 3: Add to shelf
-    resultsGrid.addEventListener("change", (e)=>{
+    // Phase 3 (fixed): Add to shelf with Google Books enrichment
+    resultsGrid.addEventListener("change", async (e)=>{
       const sel = e.target.closest("select[data-add]");
       if (!sel) return;
       const dest = sel.value;
@@ -279,11 +276,40 @@
 
       const card = sel.closest("[data-id]");
       const id   = sel.getAttribute("data-add");
-      const title   = card.querySelector(".book-title")?.textContent || "Untitled";
-      const authors = (card.querySelector(".book-author")?.textContent || "").split(",").map(s=>s.trim()).filter(Boolean);
-      const description = card.querySelector(".notes")?.textContent || "";
 
-      upsertToShelf(dest, { id, title, authors, description, rating: 0 });
+      let book;
+      try {
+        const res = await fetch(API_GB_VOL + encodeURIComponent(id));
+        if (!res.ok) throw new Error("gb");
+        const vol = await res.json();
+        const v   = vol.volumeInfo || {};
+        book = {
+          id,
+          title: v.title || card.querySelector(".book-title")?.textContent || "Untitled",
+          authors: v.authors || (card.querySelector(".book-author")?.textContent.split(",").map(s=>s.trim())||[]),
+          thumbnail: (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://"),
+          description: v.description || (card.querySelector(".notes")?.textContent || ""),
+          rating: 0,
+          status: dest,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+      } catch {
+        // fallback minimal
+        book = {
+          id,
+          title: card.querySelector(".book-title")?.textContent || "Untitled",
+          authors: (card.querySelector(".book-author")?.textContent || "").split(",").map(s=>s.trim()).filter(Boolean),
+          thumbnail: "",
+          description: card.querySelector(".notes")?.textContent || "",
+          rating: 0,
+          status: dest,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+      }
+
+      upsertToShelf(dest, book);
       sel.blur();
       if (getLastShelf() === dest) renderShelf(dest);
     });
@@ -309,7 +335,7 @@
       }
     });
 
-    // Details (opens modal with whatever we have; LLM/OL hook comes later)
+    // Details (opens modal with whatever we have; LLM/OL hook can fill later)
     resultsGrid.addEventListener("click", (e)=>{
       const btn = e.target.closest("[data-view]");
       if (!btn) return;
@@ -335,7 +361,7 @@
       renderShelf(from); // keep current tab
     });
 
-    // Phase 3: Remove
+    // Phase 3: Remove + Details
     shelfGrid.addEventListener("click", (e)=>{
       const rem = e.target.closest("[data-remove]");
       if (rem){
@@ -345,7 +371,6 @@
         renderShelf(shelf);
       }
 
-      // Details from shelf card
       const view = e.target.closest("[data-view]");
       if (view){
         const id = view.getAttribute("data-view");
@@ -375,7 +400,7 @@
     });
   }
 
-  // ---------------- Modal helpers (basic)
+  // ---------------- Modal (basic contract)
   function openModal(title, byline, html){
     const m = $("#modal"); if (!m) return;
     $("#modalTitle").textContent = title || "Untitled";
