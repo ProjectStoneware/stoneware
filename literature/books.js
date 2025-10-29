@@ -1,13 +1,13 @@
 /* ============================================================================
-   Stoneware · Literature — Phases 1–7
+   Stoneware · Literature — Phases 1–8 (LLM-first details + verify helpers)
    - 1: storage + shelf renderer + tab switching
    - 2: search (doesn't touch shelves)
    - 3: Add / Move / Remove (+ toasts)
    - 4: ratings (shelf-only) persist with quarter-step clamp
-   - 5: Details modal opens instantly; summary filled later
-   - 6: UX polish — sticky header (CSS), toasts, empty states, modal safety,
-        shelves sorted by updatedAt desc
-   - 7: LLM summary proxy (Gemini) with caching + persistence to saved book
+   - 5: Details modal opens instantly; summary filled via pipeline
+   - 6: UX polish — toasts, empty states, modal safety, shelves sorted
+   - 7: LLM summary proxy (Gemini) with cache + persistence
+   - 8: Verification helpers (console-run) for smoke tests
 ============================================================================ */
 
 (function () {
@@ -19,8 +19,10 @@
   // APIs
   const API_GB_SEARCH = "https://www.googleapis.com/books/v1/volumes?q=";
   const API_GB_VOL    = "https://www.googleapis.com/books/v1/volumes/"; // + id
+  const API_OL_BY_ISBN = (isbn) => `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`; // optional
 
-  // Phase 7: local Gemini server URL (change to your deployed URL later)
+  // Phase 7: local Gemini server URL (change to deployed URL later)
+  // Leave empty string to disable LLM step gracefully.
   const LLM_SUMMARY_URL = "http://localhost:8787/summary";
 
   // ---------------- Tiny utils
@@ -55,7 +57,7 @@
   // ---------------- Storage (Phases 1,6)
   function load(shelf){ return safeJSON(localStorage.getItem("books_"+shelf), []) || []; }
   function save(shelf, arr){ localStorage.setItem("books_"+shelf, JSON.stringify(Array.isArray(arr)?arr:[])); }
-  function ensureShelfKeys(){ SHELVES.forEach(s=>{ if (localStorage.getItem("books_"+s)===null) localStorage.setItem("books_"+s,"[]"); }); }
+  function ensureShelfKeys(){ SHELVES.forEach(s=>{ if (localStorage.getItem("books_"+s)===null) localStorage.setItem("books_"+s","[]"); }); }
 
   function upsertToShelf(shelf, book){
     const list = load(shelf);
@@ -138,7 +140,7 @@
             <label class="btn small">Add to
               <select data-add="${esc(b.id)}" style="margin-left:6px">
                 <option value="" selected disabled>Select shelf…</option>
-                ${shelfOptions(undefined)} <!-- no default so To Read can be chosen -->
+                ${shelfOptions(undefined)}
               </select>
             </label>
             <button class="btn small" data-view="${esc(b.id)}">Details</button>
@@ -158,7 +160,7 @@
     const list = (load(name) || []).slice().sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
     shelfGrid.innerHTML = list.length
       ? list.map(b => shelfCardHTML(b, name)).join("")
-      : `<p class="sub empty">No books on “${LABEL[name]}” yet. Try a search above and “Add to ${LABEL[name]}”.</p>`;
+      : `<p class="sub empty">No books on “${LABEL[name]}” yet. Try a search above and choose Add → ${LABEL[name]}.</p>`;
   }
 
   function renderResults(items){
@@ -175,12 +177,21 @@
       const data = await res.json();
       const items = (data.items||[]).map(it=>{
         const v = it.volumeInfo || {};
+        // try to capture ISBNs for OpenLibrary fallback
+        const ids = (v.industryIdentifiers || []).reduce((acc, o)=>{
+          if (o.type === "ISBN_10") acc.isbn10 = o.identifier;
+          if (o.type === "ISBN_13") acc.isbn13 = o.identifier;
+          return acc;
+        }, { isbn10:null, isbn13:null });
         return {
           id: it.id,
           title: v.title || "Untitled",
           authors: v.authors || [],
           thumbnail: (v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "").replace("http://","https://"),
-          description: v.description || ""
+          description: v.description || "",
+          avg: v.averageRating || 0,
+          count: v.ratingsCount || 0,
+          ...ids
         };
       });
       renderResults(items);
@@ -203,8 +214,19 @@
     try { localStorage.setItem(LLM_CACHE_KEY, JSON.stringify(obj || {})); } catch {}
   }
   const llmCachePersist = loadLLMCache();
-  function cacheKeyFor(t, a0){
-    return (t||"").toLowerCase().trim() + "||" + (a0||"").toLowerCase().trim();
+  const cacheKeyFor = (t, a0) => (t||"").toLowerCase().trim() + "||" + (a0||"").toLowerCase().trim();
+
+  async function getOpenLibraryDesc(isbn10, isbn13){
+    const pick = isbn13 || isbn10;
+    if (!pick) return null;
+    try{
+      const r = await fetch(API_OL_BY_ISBN(pick));
+      if (!r.ok) return null;
+      const j = await r.json();
+      // OL stores description as string or { value }
+      const d = typeof j.description === "string" ? j.description : j.description?.value;
+      return d ? String(d).trim() : null;
+    }catch{ return null; }
   }
 
   async function getLLMSummary({ title, authors, descriptionHint }){
@@ -242,7 +264,7 @@
     }
   }
 
-  function persistBetterDescription(id, newDesc){
+  function persistBetterDescription(id, newDesc, src){
     if (!newDesc) return;
     for (const s of SHELVES){
       const arr = load(s);
@@ -250,15 +272,20 @@
       if (i !== -1) {
         const now = Date.now();
         const old = arr[i] || {};
-        arr[i] = { ...old, description: newDesc, updatedAt: now };
+        arr[i] = { ...old, description: newDesc, descriptionSource: src || old.descriptionSource || "unknown", updatedAt: now };
         save(s, arr);
       }
     }
   }
 
+  // LLM-first summary selection:
+  // 1) If we already have a short (<= ~700 chars) saved description and it was LLM-created, use it.
+  // 2) Else try OpenLibrary by ISBN.
+  // 3) Else call LLM (Gemini) with a spoiler-safe 3–5 sentence prompt.
   async function showDetails(bookLike){
     const title = bookLike.title || "Untitled";
-    const by    = (bookLike.authors || []).join(", ");
+    const authorsArr = bookLike.authors || [];
+    const by    = authorsArr.join(", ");
     // open instantly
     openModal(title, by, "<p><em>Loading summary…</em></p>");
 
@@ -268,22 +295,42 @@
     }, 5000);
 
     try {
-      // 1) saved copy?
+      // Look up any saved copy
       const where = findBookAnywhere(bookLike.id);
       const existing = where.book;
 
-      let summary = existing?.description || bookLike.description || "";
+      // Prefer LLM-sized text; reject long GB blurbs
+      const hasShortSavedLLM =
+        existing?.description &&
+        (existing?.descriptionSource === "llm") &&
+        existing.description.length <= 700;
 
-      // 2) (optional) Open Library description could be tried here later.
+      let summary =
+        hasShortSavedLLM ? existing.description :
+        null;
 
-      // 3) LLM proxy if we still need better text
-      if ((!summary || summary.length < 60) && LLM_SUMMARY_URL) {
-        const hint = bookLike.description || existing?.description || "";
-        const llm = await getLLMSummary({ title, authors: bookLike.authors || existing?.authors || [], descriptionHint: hint });
-        if (llm && llm.length > (summary||"").length) summary = llm;
+      // Open Library (only if we don't already have a nice short summary)
+      if (!summary) {
+        const ol = await getOpenLibraryDesc(existing?.isbn10 || bookLike.isbn10, existing?.isbn13 || bookLike.isbn13);
+        if (ol && ol.length >= 120 && ol.length <= 900) summary = ol;
       }
 
-      const communityLine = ""; // hook for avg/count later
+      // LLM (Gemini) if still needed; pass a hint to help it stay tight
+      if (!summary && LLM_SUMMARY_URL) {
+        const hint = (() => {
+          const d = bookLike.description || existing?.description || "";
+          // Trim any wild GB essay down to first ~350 chars to orient the model
+          return d.length > 350 ? d.slice(0, 350) : d;
+        })();
+        const llm = await getLLMSummary({ title, authors: authorsArr.length?authorsArr:(existing?.authors||[]), descriptionHint: hint });
+        if (llm) summary = llm;
+      }
+
+      // Community line hook (we have avg/count from GB search sometimes)
+      const communityLine = (bookLike.avg && bookLike.count)
+        ? `<p class="sub" style="margin:0 0 8px">${Number(bookLike.avg).toFixed(2)} ★ (${Number(bookLike.count).toLocaleString()})</p>`
+        : "";
+
       const body = summary
         ? `${communityLine}<p>${summary.replace(/\n{2,}/g,"<br><br>")}</p>`
         : `${communityLine}<p><em>No summary available.</em></p>`;
@@ -292,9 +339,13 @@
       done = true;
       clearTimeout(timeout);
 
-      // Persist improved summary back into shelves
-      if (existing && summary && summary.length > (existing.description||"").length) {
-        persistBetterDescription(existing.id, summary);
+      // Persist improved summary back into shelves (mark source)
+      if (existing && summary) {
+        const src =
+          (bookLike.avg || bookLike.count) ? existing?.descriptionSource :
+          (summary === existing?.description) ? existing?.descriptionSource :
+          (summary.length <= 900 ? "llm" : "openlibrary");
+        persistBetterDescription(existing.id, summary, src);
       }
     } catch {
       done = true;
@@ -339,6 +390,11 @@
         if (!res.ok) throw new Error("gb");
         const vol = await res.json();
         const v   = vol.volumeInfo || {};
+        const ids = (v.industryIdentifiers || []).reduce((acc, o)=>{
+          if (o.type === "ISBN_10") acc.isbn10 = o.identifier;
+          if (o.type === "ISBN_13") acc.isbn13 = o.identifier;
+          return acc;
+        }, { isbn10:null, isbn13:null });
         book = {
           id,
           title: v.title || card.querySelector(".book-title")?.textContent || "Untitled",
@@ -348,7 +404,8 @@
           rating: 0,
           status: dest,
           createdAt: Date.now(),
-          updatedAt: Date.now()
+          updatedAt: Date.now(),
+          ...ids
         };
       } catch {
         book = {
@@ -370,7 +427,7 @@
       if (getLastShelf() === dest) renderShelf(dest);
     });
 
-    // Details → Phase 7 pipeline
+    // Details → Phase 7 pipeline (LLM-first)
     resultsGrid.addEventListener("click", (e)=>{
       const btn = e.target.closest("[data-view]");
       if (!btn) return;
@@ -379,7 +436,10 @@
       const title = card.querySelector(".book-title")?.textContent || "Untitled";
       const authors = (card.querySelector(".book-author")?.textContent || "").split(",").map(s=>s.trim()).filter(Boolean);
       const description = card.querySelector(".notes")?.textContent || "";
-      showDetails({ id, title, authors, description });
+      // try to pass ISBNs if they were normalized into dataset by search() render
+      const isbn10 = card.dataset.isbn10 || null;
+      const isbn13 = card.dataset.isbn13 || null;
+      showDetails({ id, title, authors, description, isbn10, isbn13, avg: null, count: null });
     });
   }
 
@@ -398,7 +458,7 @@
       renderShelf(from); // keep current view
     });
 
-    // Remove + toast; Details → Phase 7
+    // Remove + toast; Details → LLM-first
     shelfGrid.addEventListener("click", (e)=>{
       const rem = e.target.closest("[data-remove]");
       if (rem){
@@ -415,8 +475,16 @@
         const found = findBookAnywhere(id).book;
         const title = found?.title || "Details";
         const by    = (found?.authors || []).join(", ");
-        const desc  = found?.description || "";
-        showDetails({ id, title, authors: found?.authors || [], description: desc });
+        showDetails({
+          id,
+          title,
+          authors: found?.authors || [],
+          description: found?.description || "",
+          isbn10: found?.isbn10 || null,
+          isbn13: found?.isbn13 || null,
+          avg: found?.avg || null,
+          count: found?.count || null
+        });
       }
     });
 
@@ -473,6 +541,46 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  // Dev helpers
+  // ---------------- Phase 8: minimal verification helpers (console)
+  // Usage:
+  //   __stone_verify.clear();
+  //   __stone_verify.seedOne();
+  //   __stone_verify.check();
+  window.__stone_verify = {
+    clear(){
+      SHELVES.forEach(s=>localStorage.removeItem("books_"+s));
+      localStorage.removeItem("llm_cache_v1");
+      renderShelf(getLastShelf());
+      showToast("Cleared shelves");
+    },
+    seedOne(){
+      const b = {
+        id: "TEST-SPARROW",
+        title: "The Sparrow",
+        authors: ["Mary Doria Russell"],
+        thumbnail: "https://covers.openlibrary.org/b/id/7222246-M.jpg",
+        description: "",
+        rating: 0, status:"toRead",
+        createdAt: Date.now(), updatedAt: Date.now(),
+        isbn10: "0449912558", isbn13: "9780449912553"
+      };
+      upsertToShelf("toRead", b);
+      renderShelf("toRead");
+      showToast("Seeded ‘The Sparrow’");
+    },
+    check(){
+      console.log("Tabs present:", !!$("#shelfTabs"));
+      console.log("Shelf grid present:", !!$("#shelfGrid"));
+      console.log("Search form present:", !!$("#searchForm"));
+      console.log("LLM URL set:", !!LLM_SUMMARY_URL);
+      console.log("Last shelf:", getLastShelf());
+      console.log("To Read items:", load("toRead").length);
+      console.log("Reading items:", load("reading").length);
+      console.log("Finished items:", load("finished").length);
+      console.log("Abandoned items:", load("abandoned").length);
+    }
+  };
+
+  // Dev helpers (kept)
   window.__stone_shelves = { load, save, upsertToShelf, moveBetweenShelves, findBookAnywhere, renderShelf, doSearch };
 })();
