@@ -1,13 +1,15 @@
 /* ============================================================================
-   Stoneware · Literature — Phases 1–8 (LLM-first details + verify helpers)
-   - 1: storage + shelf renderer + tab switching
-   - 2: search (doesn't touch shelves)
+   Stoneware · Literature — Phases 0–8 (hardened, LLM-first Details)
+   - 0: JS guards for required HTML hooks (#searchForm, #q, #resultsGrid,
+        #shelfTabs, #shelfGrid, #modal + parts) so the page never explodes
+   - 1: Storage + shelf renderer + tab switching
+   - 2: Search (never mutates shelves)
    - 3: Add / Move / Remove (+ toasts)
-   - 4: ratings (shelf-only) persist with quarter-step clamp
-   - 5: Details modal opens instantly; summary filled via pipeline
-   - 6: UX polish — toasts, empty states, modal safety, shelves sorted
-   - 7: LLM summary proxy (Gemini) with cache + persistence
-   - 8: Verification helpers (console-run) for smoke tests
+   - 4: Ratings (shelf-only, quarter-step clamp) with persistence
+   - 5: Details modal opens instantly and never blanks or hangs
+   - 6: UX polish — toasts, empty states, modal safety, shelves sorted by updatedAt desc
+   - 7: LLM summary proxy (Gemini) — LLM-first; OL fallback; local caching; persist better text
+   - 8: Verification helpers for quick smoke tests
 ============================================================================ */
 
 (function () {
@@ -16,13 +18,13 @@
   const LABEL   = { toRead:"To Read", reading:"Reading", finished:"Finished", abandoned:"Abandoned" };
   const LAST_SHELF_KEY = "books_lastShelf";
 
-  // APIs
+  // External APIs
   const API_GB_SEARCH = "https://www.googleapis.com/books/v1/volumes?q=";
   const API_GB_VOL    = "https://www.googleapis.com/books/v1/volumes/"; // + id
-  const API_OL_BY_ISBN = (isbn) => `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`; // optional
+  const API_OL_BY_ISBN = (isbn) => `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`;
 
-  // Phase 7: local Gemini server URL (change to deployed URL later)
-  // Leave empty string to disable LLM step gracefully.
+  // Phase 7: your local Gemini proxy (change to your deployed URL when ready)
+  // Leave empty string to disable the LLM step gracefully.
   const LLM_SUMMARY_URL = "http://localhost:8787/summary";
 
   // ---------------- Tiny utils
@@ -30,9 +32,9 @@
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const esc = s => (s ?? "").toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
   const clampQuarter = v => Math.round(Number(v||0) * 4) / 4;
-  function safeJSON(s, fb){ if (s==null || s==="") return fb; try { return JSON.parse(s); } catch { return fb; } }
+  const safeJSON = (s, fb)=>{ if (s==null || s==="") return fb; try { return JSON.parse(s); } catch { return fb; } };
 
-  // ---------------- Toasts (Phase 6)
+  // ---------------- Phase 6: Toasts
   function ensureToastHost(){
     let host = $("#toastHost");
     if (!host) {
@@ -48,16 +50,16 @@
     t.className = "toast";
     t.textContent = msg;
     host.appendChild(t);
-    void t.offsetWidth; // trigger transition
+    void t.offsetWidth;             // kick in CSS transition
     t.classList.add("in");
     setTimeout(()=>{ t.classList.remove("in"); t.classList.add("out"); }, 1700);
     setTimeout(()=>{ t.remove(); }, 2300);
   }
 
-  // ---------------- Storage (Phases 1,6)
+  // ---------------- Storage (1,6)
   function load(shelf){ return safeJSON(localStorage.getItem("books_"+shelf), []) || []; }
   function save(shelf, arr){ localStorage.setItem("books_"+shelf, JSON.stringify(Array.isArray(arr)?arr:[])); }
-  function ensureShelfKeys(){ SHELVES.forEach(s=>{ if (localStorage.getItem("books_"+s)===null) localStorage.setItem("books_"+s","[]"); }); }
+  function ensureShelfKeys(){ SHELVES.forEach(s=>{ if (localStorage.getItem("books_"+s)===null) localStorage.setItem("books_"+s, "[]"); }); }
 
   function upsertToShelf(shelf, book){
     const list = load(shelf);
@@ -88,10 +90,15 @@
   const getLastShelf = () => localStorage.getItem(LAST_SHELF_KEY) || "toRead";
   const setLastShelf = (shelf) => localStorage.setItem(LAST_SHELF_KEY, shelf);
 
-  // ---------------- Renderers (Phases 1–2,6)
+  // ---------------- DOM refs — Phase 0 guard (don’t explode if missing)
   const resultsGrid = $("#resultsGrid");
   const shelfGrid   = $("#shelfGrid");
+  const shelfTabs   = $("#shelfTabs");
+  const searchForm  = $("#searchForm");
+  const qInput      = $("#q");
+  const statusEl    = $("#status");
 
+  // ---------------- Renderers (1–2,6)
   const shelfOptions = (selected) =>
     SHELVES.map(k=>`<option value="${k}" ${selected===k?"selected":""}>${LABEL[k]}</option>`).join("");
 
@@ -128,8 +135,14 @@
   function resultCardHTML(b){
     const coverStyle = b.thumbnail ? ` style="background-image:url('${esc(b.thumbnail)}');background-size:cover;background-position:center"` : "";
     const byline = (b.authors || []).join(", ");
+    // include metadata for Details pipeline via data- attrs
     return `
-      <article class="book search" data-id="${esc(b.id)}">
+      <article class="book search"
+               data-id="${esc(b.id)}"
+               data-isbn10="${esc(b.isbn10||"")}"
+               data-isbn13="${esc(b.isbn13||"")}"
+               data-avg="${esc(b.avg||"")}"
+               data-count="${esc(b.count||"")}">
         <div class="cover"${coverStyle}></div>
         <div class="meta">
           <h3 class="book-title">${esc(b.title || "Untitled")}</h3>
@@ -150,13 +163,13 @@
   }
 
   function renderShelf(name){
+    if (!shelfGrid || !shelfTabs) return;
     setLastShelf(name);
     $$("#shelfTabs .tab").forEach(t=>{
       const active = t.dataset.shelf === name;
       t.classList.toggle("is-active", active);
       t.setAttribute("aria-selected", active ? "true" : "false");
     });
-    // Phase 6: sort by updatedAt desc
     const list = (load(name) || []).slice().sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0));
     shelfGrid.innerHTML = list.length
       ? list.map(b => shelfCardHTML(b, name)).join("")
@@ -164,20 +177,20 @@
   }
 
   function renderResults(items){
+    if (!resultsGrid) return;
     resultsGrid.innerHTML = items.length
       ? items.map(resultCardHTML).join("")
       : `<p class="sub empty">No results. Try a different title/author.</p>`;
   }
 
-  // ---------------- Search (Phase 2)
+  // ---------------- Search (2)
   async function doSearch(q){
-    const status = $("#status"); if (status) status.textContent = "Searching…";
+    if (statusEl) statusEl.textContent = "Searching…";
     try{
       const res = await fetch(`${API_GB_SEARCH}${encodeURIComponent(q)}&maxResults=12`);
       const data = await res.json();
       const items = (data.items||[]).map(it=>{
         const v = it.volumeInfo || {};
-        // try to capture ISBNs for OpenLibrary fallback
         const ids = (v.industryIdentifiers || []).reduce((acc, o)=>{
           if (o.type === "ISBN_10") acc.isbn10 = o.identifier;
           if (o.type === "ISBN_13") acc.isbn13 = o.identifier;
@@ -195,24 +208,18 @@
         };
       });
       renderResults(items);
-      if (status) status.textContent = "";
+      if (statusEl) statusEl.textContent = "";
     }catch{
-      if (status) status.textContent = "Search failed. Try again.";
+      if (statusEl) statusEl.textContent = "Search failed. Try again.";
       renderResults([]);
     }
   }
 
-  // ---------------- Phase 7: LLM summary pipeline (cache + persist)
-  const __llmCache = new Map();                 // session cache
-  const LLM_CACHE_KEY = "llm_cache_v1";         // localStorage cache (by title|author)
-  function loadLLMCache(){
-    const raw = localStorage.getItem(LLM_CACHE_KEY);
-    if (!raw) return {};
-    try { return JSON.parse(raw) || {}; } catch { return {}; }
-  }
-  function saveLLMCache(obj){
-    try { localStorage.setItem(LLM_CACHE_KEY, JSON.stringify(obj || {})); } catch {}
-  }
+  // ---------------- Phase 7: LLM pipeline (LLM-first, OL fallback, cache)
+  const __llmCache = new Map();
+  const LLM_CACHE_KEY = "llm_cache_v1";
+  function loadLLMCache(){ return safeJSON(localStorage.getItem(LLM_CACHE_KEY), {}) || {}; }
+  function saveLLMCache(obj){ try { localStorage.setItem(LLM_CACHE_KEY, JSON.stringify(obj||{})); } catch {} }
   const llmCachePersist = loadLLMCache();
   const cacheKeyFor = (t, a0) => (t||"").toLowerCase().trim() + "||" + (a0||"").toLowerCase().trim();
 
@@ -223,7 +230,6 @@
       const r = await fetch(API_OL_BY_ISBN(pick));
       if (!r.ok) return null;
       const j = await r.json();
-      // OL stores description as string or { value }
       const d = typeof j.description === "string" ? j.description : j.description?.value;
       return d ? String(d).trim() : null;
     }catch{ return null; }
@@ -244,11 +250,7 @@
       const res = await fetch(LLM_SUMMARY_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title || "",
-          authors: authors || [],
-          descriptionHint: descriptionHint || ""
-        })
+        body: JSON.stringify({ title: title||"", authors: authors||[], descriptionHint: descriptionHint||"" })
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -259,9 +261,7 @@
         saveLLMCache(llmCachePersist);
       }
       return summary || null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   function persistBetterDescription(id, newDesc, src){
@@ -278,15 +278,16 @@
     }
   }
 
-  // LLM-first summary selection:
-  // 1) If we already have a short (<= ~700 chars) saved description and it was LLM-created, use it.
-  // 2) Else try OpenLibrary by ISBN.
-  // 3) Else call LLM (Gemini) with a spoiler-safe 3–5 sentence prompt.
+  // LLM-FIRST pipeline:
+  // 1) If a saved LLM summary (short) exists, use it.
+  // 2) Else call LLM (Gemini) with a tight, spoiler-safe prompt (using GB text only as a hint).
+  // 3) Else try Open Library by ISBN.
   async function showDetails(bookLike){
     const title = bookLike.title || "Untitled";
     const authorsArr = bookLike.authors || [];
     const by    = authorsArr.join(", ");
-    // open instantly
+
+    // open instantly (no blank modal)
     openModal(title, by, "<p><em>Loading summary…</em></p>");
 
     let done = false;
@@ -295,40 +296,37 @@
     }, 5000);
 
     try {
-      // Look up any saved copy
       const where = findBookAnywhere(bookLike.id);
       const existing = where.book;
 
-      // Prefer LLM-sized text; reject long GB blurbs
       const hasShortSavedLLM =
         existing?.description &&
         (existing?.descriptionSource === "llm") &&
         existing.description.length <= 700;
 
-      let summary =
-        hasShortSavedLLM ? existing.description :
-        null;
+      let summary = hasShortSavedLLM ? existing.description : null;
 
-      // Open Library (only if we don't already have a nice short summary)
-      if (!summary) {
-        const ol = await getOpenLibraryDesc(existing?.isbn10 || bookLike.isbn10, existing?.isbn13 || bookLike.isbn13);
-        if (ol && ol.length >= 120 && ol.length <= 900) summary = ol;
-      }
-
-      // LLM (Gemini) if still needed; pass a hint to help it stay tight
+      // LLM first (use GB text only as a hint; do not display it directly)
       if (!summary && LLM_SUMMARY_URL) {
         const hint = (() => {
           const d = bookLike.description || existing?.description || "";
-          // Trim any wild GB essay down to first ~350 chars to orient the model
           return d.length > 350 ? d.slice(0, 350) : d;
         })();
         const llm = await getLLMSummary({ title, authors: authorsArr.length?authorsArr:(existing?.authors||[]), descriptionHint: hint });
         if (llm) summary = llm;
       }
 
-      // Community line hook (we have avg/count from GB search sometimes)
-      const communityLine = (bookLike.avg && bookLike.count)
-        ? `<p class="sub" style="margin:0 0 8px">${Number(bookLike.avg).toFixed(2)} ★ (${Number(bookLike.count).toLocaleString()})</p>`
+      // OL fallback
+      if (!summary) {
+        const ol = await getOpenLibraryDesc(existing?.isbn10 || bookLike.isbn10, existing?.isbn13 || bookLike.isbn13);
+        if (ol && ol.length >= 120 && ol.length <= 900) summary = ol;
+      }
+
+      // community line (GB)
+      const avg = Number(bookLike.avg || existing?.avg || 0);
+      const cnt = Number(bookLike.count || existing?.count || 0);
+      const communityLine = (avg && cnt)
+        ? `<p class="sub" style="margin:0 0 8px">${avg.toFixed(2)} ★ (${cnt.toLocaleString()})</p>`
         : "";
 
       const body = summary
@@ -336,27 +334,25 @@
         : `${communityLine}<p><em>No summary available.</em></p>`;
 
       openModal(title, by, body);
-      done = true;
-      clearTimeout(timeout);
+      done = true; clearTimeout(timeout);
 
-      // Persist improved summary back into shelves (mark source)
+      // Persist improved text (mark source)
       if (existing && summary) {
-        const src =
-          (bookLike.avg || bookLike.count) ? existing?.descriptionSource :
-          (summary === existing?.description) ? existing?.descriptionSource :
-          (summary.length <= 900 ? "llm" : "openlibrary");
+        const src = (hasShortSavedLLM) ? "llm"
+                 : (summary === existing?.description) ? existing?.descriptionSource
+                 : (summary.length <= 900 ? "llm" : "openlibrary");
         persistBetterDescription(existing.id, summary, src);
       }
     } catch {
-      done = true;
-      clearTimeout(timeout);
+      done = true; clearTimeout(timeout);
       openModal(title, by, "<p><em>No summary available.</em></p>");
     }
   }
 
-  // ---------------- Wire-up (Phases 1–7)
+  // ---------------- Wire-up (1–7)
   function bindTabs(){
-    $("#shelfTabs")?.addEventListener("click", (e)=>{
+    if (!shelfTabs) return;
+    shelfTabs.addEventListener("click", (e)=>{
       const btn = e.target.closest(".tab[data-shelf]");
       if (!btn) return;
       e.preventDefault();
@@ -365,9 +361,10 @@
   }
 
   function bindSearch(){
-    $("#searchForm")?.addEventListener("submit", (e)=>{
+    if (!searchForm) return;
+    searchForm.addEventListener("submit", (e)=>{
       e.preventDefault();
-      const q = $("#q")?.value.trim();
+      const q = qInput?.value.trim();
       if (q) doSearch(q);
     });
   }
@@ -375,7 +372,7 @@
   function bindResultsGrid(){
     if (!resultsGrid) return;
 
-    // Add to shelf (with GB enrichment) + toast (Phase 3 + 6)
+    // Add (3) + toast (6)
     resultsGrid.addEventListener("change", async (e)=>{
       const sel = e.target.closest("select[data-add]");
       if (!sel) return;
@@ -405,6 +402,8 @@
           status: dest,
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          avg: v.averageRating || 0,
+          count: v.ratingsCount || 0,
           ...ids
         };
       } catch {
@@ -427,26 +426,26 @@
       if (getLastShelf() === dest) renderShelf(dest);
     });
 
-    // Details → Phase 7 pipeline (LLM-first)
+    // Details (LLM-first pipeline)
     resultsGrid.addEventListener("click", (e)=>{
-      const btn = e.target.closest("[data-view]");
-      if (!btn) return;
+      const btn = e.target.closest("[data-view]"); if (!btn) return;
       const card = btn.closest("[data-id]");
       const id   = btn.getAttribute("data-view");
       const title = card.querySelector(".book-title")?.textContent || "Untitled";
       const authors = (card.querySelector(".book-author")?.textContent || "").split(",").map(s=>s.trim()).filter(Boolean);
       const description = card.querySelector(".notes")?.textContent || "";
-      // try to pass ISBNs if they were normalized into dataset by search() render
-      const isbn10 = card.dataset.isbn10 || null;
-      const isbn13 = card.dataset.isbn13 || null;
-      showDetails({ id, title, authors, description, isbn10, isbn13, avg: null, count: null });
+      const isbn10 = card.getAttribute("data-isbn10") || null;
+      const isbn13 = card.getAttribute("data-isbn13") || null;
+      const avg    = Number(card.getAttribute("data-avg") || 0);
+      const count  = Number(card.getAttribute("data-count") || 0);
+      showDetails({ id, title, authors, description, isbn10, isbn13, avg, count });
     });
   }
 
   function bindShelfGrid(){
     if (!shelfGrid) return;
 
-    // Move + toast
+    // Move (3) + toast (6)
     shelfGrid.addEventListener("change", (e)=>{
       const sel = e.target.closest("select[data-move]");
       if (!sel) return;
@@ -455,10 +454,10 @@
       const from = sel.closest("[data-shelf]")?.getAttribute("data-shelf") || getLastShelf();
       moveBetweenShelves(from, to, id);
       showToast(`Moved to ${LABEL[to]}`);
-      renderShelf(from); // keep current view
+      renderShelf(from); // keep your current view
     });
 
-    // Remove + toast; Details → LLM-first
+    // Remove (3) + toast (6) + Details passthrough (5/7)
     shelfGrid.addEventListener("click", (e)=>{
       const rem = e.target.closest("[data-remove]");
       if (rem){
@@ -467,28 +466,27 @@
         save(shelf, load(shelf).filter(x => x.id !== id));
         showToast("Removed");
         renderShelf(shelf);
+        return;
       }
-
       const view = e.target.closest("[data-view]");
       if (view){
         const id = view.getAttribute("data-view");
         const found = findBookAnywhere(id).book;
-        const title = found?.title || "Details";
-        const by    = (found?.authors || []).join(", ");
+        if (!found) return;
         showDetails({
-          id,
-          title,
-          authors: found?.authors || [],
-          description: found?.description || "",
-          isbn10: found?.isbn10 || null,
-          isbn13: found?.isbn13 || null,
-          avg: found?.avg || null,
-          count: found?.count || null
+          id: found.id,
+          title: found.title || "Details",
+          authors: found.authors || [],
+          description: found.description || "",
+          isbn10: found.isbn10 || null,
+          isbn13: found.isbn13 || null,
+          avg: found.avg || null,
+          count: found.count || null
         });
       }
     });
 
-    // Rating (shelf-only; persists immediately) + rerender + sort (Phase 4/6)
+    // Ratings (4) + rerender to keep sort fresh (6)
     shelfGrid.addEventListener("input", (e)=>{
       const slider = e.target.closest('input[type="range"][data-rate]');
       if (!slider) return;
@@ -498,23 +496,23 @@
       if (out) out.textContent = v ? v.toFixed(2).replace(/\.00$/,"") : "No rating";
       const where = findBookAnywhere(id);
       if (where.book) {
-        upsertToShelf(where.shelf, { ...where.book, rating: v }); // updatedAt bumps
+        upsertToShelf(where.shelf, { ...where.book, rating: v });
         if (getLastShelf() === where.shelf) renderShelf(where.shelf);
       }
     });
   }
 
-  // ---------------- Modal (safety polish, Phase 5/6)
+  // ---------------- Modal (5/6) — safety: cannot strand backdrop
   function openModal(title, byline, html){
     const m = $("#modal"); if (!m) return;
-    $("#modalTitle").textContent = title || "Untitled";
-    $("#modalByline").textContent = byline || "";
-    $("#modalBody").innerHTML = html || "<p><em>No summary available.</em></p>";
+    $("#modalTitle") && ($("#modalTitle").textContent = title || "Untitled");
+    $("#modalByline") && ($("#modalByline").textContent = byline || "");
+    $("#modalBody") && ($("#modalBody").innerHTML = html || "<p><em>No summary available.</em></p>");
     m.classList.add("show"); m.setAttribute("aria-hidden","false");
 
     const close = ()=>{ m.classList.remove("show"); m.setAttribute("aria-hidden","true"); cleanup(); };
-    $("#modalClose").onclick = close;
-    $("#modalCancel").onclick = close;
+    const btnClose  = $("#modalClose");  if (btnClose)  btnClose.onclick  = close;
+    const btnCancel = $("#modalCancel"); if (btnCancel) btnCancel.onclick = close;
 
     const onBackdrop = (e)=>{ if(e.target===m) close(); };
     const onEsc = (e)=>{ if(e.key==="Escape") close(); };
@@ -528,13 +526,22 @@
     }
   }
 
-  // ---------------- Init
+  // ---------------- Init (0–6)
   function init(){
     ensureShelfKeys();
+
+    // Phase 0: bail early if key hooks are missing
+    const must = ["#shelfTabs","#shelfGrid","#resultsGrid","#searchForm","#q","#modal","#modalTitle","#modalByline","#modalBody","#modalClose","#modalCancel"];
+    const missing = must.filter(sel => !$(sel));
+    if (missing.length){
+      console.warn("Missing required hooks:", missing.join(", "));
+    }
+
     bindTabs();
     bindSearch();
     bindResultsGrid();
     bindShelfGrid();
+
     renderShelf(getLastShelf());
     const y = document.getElementById("y"); if (y) y.textContent = new Date().getFullYear();
   }
@@ -542,10 +549,8 @@
   else init();
 
   // ---------------- Phase 8: minimal verification helpers (console)
-  // Usage:
-  //   __stone_verify.clear();
-  //   __stone_verify.seedOne();
-  //   __stone_verify.check();
+  // Usage in DevTools:
+  //   __stone_verify.clear(); __stone_verify.seedOne(); __stone_verify.check();
   window.__stone_verify = {
     clear(){
       SHELVES.forEach(s=>localStorage.removeItem("books_"+s));
@@ -582,5 +587,7 @@
   };
 
   // Dev helpers (kept)
-  window.__stone_shelves = { load, save, upsertToShelf, moveBetweenShelves, findBookAnywhere, renderShelf, doSearch };
+  window.__stone_shelves = {
+    load, save, upsertToShelf, moveBetweenShelves, findBookAnywhere, renderShelf, doSearch
+  };
 })();
