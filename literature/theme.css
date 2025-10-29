@@ -98,6 +98,16 @@
   border-color: var(--accent);
 }
 
+/* Keyboard focus (ADD) */
+.theme-literature .btn:focus-visible,
+.theme-literature .tab:focus-visible,
+.theme-literature .modal .close:focus-visible,
+.theme-literature input[type="range"]:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--accent) 70%, white);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.45);
+}
+
 /* =========================
    Tabs (shelves)
    ========================= */
@@ -106,6 +116,15 @@
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 8px;
+
+  /* Sticky tabs (ADD): keep shelf tabs pinned while grid scrolls */
+  position: sticky;
+  top: 64px;             /* sits below sticky header; tweak if header height changes */
+  z-index: 20;
+  padding-top: 6px;
+  background: linear-gradient(180deg, rgba(8,8,8,0.85), rgba(8,8,8,0.85));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .theme-literature .tab {
   background: #141414;
@@ -171,7 +190,15 @@
 .theme-literature .meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .theme-literature .book-title { margin: 0; font-size: 1.06rem; line-height: 1.25; color: #1f160d; }
 .theme-literature .book-author { color: var(--paper-muted); font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.theme-literature .notes { color: #3b2d1e; margin: .25rem 0 .5rem; }
+
+/* Wrapping for long blurbs/URLs (ADD) */
+.theme-literature .notes,
+.theme-literature .modal .body {
+  color: #3b2d1e;
+  margin: .25rem 0 .5rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 
 .theme-literature .badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .theme-literature .badge {
@@ -213,8 +240,10 @@
   background: rgba(0,0,0,.6);
   display: none; align-items: center; justify-content: center;
   padding: 20px; z-index: 9999;
+  transition: opacity .18s ease, visibility .18s ease; /* move from “defensive” block */
+  opacity: 0; visibility: hidden;
 }
-.theme-literature .modal-backdrop.show { display: flex; }
+.theme-literature .modal-backdrop.show { display: flex; opacity: 1; visibility: visible; }
 
 .theme-literature .modal {
   width: min(760px, 95vw);
@@ -258,6 +287,11 @@
   .theme-literature .books-grid { grid-template-columns: 1fr; }
   .theme-literature .cover { width: 68px; height: 102px; }
   .theme-literature input[type="range"] { width: 100%; }
+
+  /* Larger touch targets (ADD) */
+  .theme-literature .tab { padding: 10px 14px; }
+  .theme-literature .modal .close { padding: 10px 14px; }
+
   .theme-literature .card,
   .theme-literature .book,
   .theme-literature .modal { border-radius: 14px; }
@@ -271,6 +305,7 @@
   height: 0 !important;
   overflow: hidden !important;
 }
+
 /* --- Phase 6 polish ------------------------------------------------------ */
 
 /* Sticky header (tabs already sticky; this keeps the whole header pinned) */
@@ -318,13 +353,11 @@
 .toast.in  { opacity: 1; transform: translateY(0); }
 .toast.out { opacity: 0; transform: translateY(-6px); }
 
-/* Modal/backdrop defensive: never half-visible */
-.theme-literature .modal-backdrop {
-  transition: opacity .18s ease, visibility .18s ease;
-  opacity: 0;
-  visibility: hidden;
-}
-.theme-literature .modal-backdrop.show {
-  opacity: 1;
-  visibility: visible;
+/* Reduced motion (ADD) */
+@media (prefers-reduced-motion: reduce) {
+  .theme-literature #results,
+  .toast,
+  .theme-literature .modal-backdrop {
+    transition: none !important;
+  }
 }
