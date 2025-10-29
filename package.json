@@ -1,12 +1,16 @@
 {
   "name": "stoneware",
   "version": "1.0.0",
-  "description": "",
+  "description": "Stoneware — Literature (Phases 0–8) + Gemini summary proxy",
   "type": "module",
   "main": "api/summary-gemini.js",
   "scripts": {
     "start": "node api/summary-gemini.js",
+    "dev": "NODE_ENV=development node api/summary-gemini.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "repository": {
     "type": "git",
@@ -23,7 +27,6 @@
     "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "node-fetch": "^3.3.2"
+    "express": "^5.1.0"
   }
 }
