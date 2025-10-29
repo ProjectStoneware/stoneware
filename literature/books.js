@@ -23,9 +23,10 @@
   const API_GB_VOL    = "https://www.googleapis.com/books/v1/volumes/"; // + id
   const API_OL_BY_ISBN = (isbn) => `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`;
 
-  // Phase 7: your local Gemini proxy (change to your deployed URL when ready)
+  // Phase 7: your local/deployed Gemini proxy (set to deployed URL when ready)
   // Leave empty string to disable the LLM step gracefully.
   const LLM_SUMMARY_URL = "http://localhost:8787/summary";
+  const llmEnabled = typeof LLM_SUMMARY_URL === "string" && LLM_SUMMARY_URL.trim() !== "";
 
   // ---------------- Tiny utils
   const $  = (s, r=document)=>r.querySelector(s);
@@ -244,7 +245,7 @@
       __llmCache.set(key, llmCachePersist[key]);
       return llmCachePersist[key];
     }
-    if (!LLM_SUMMARY_URL) return null;
+    if (!llmEnabled) return null;
 
     try {
       const res = await fetch(LLM_SUMMARY_URL, {
@@ -307,7 +308,7 @@
       let summary = hasShortSavedLLM ? existing.description : null;
 
       // LLM first (use GB text only as a hint; do not display it directly)
-      if (!summary && LLM_SUMMARY_URL) {
+      if (!summary && llmEnabled) {
         const hint = (() => {
           const d = bookLike.description || existing?.description || "";
           return d.length > 350 ? d.slice(0, 350) : d;
@@ -322,12 +323,13 @@
         if (ol && ol.length >= 120 && ol.length <= 900) summary = ol;
       }
 
-      // community line (GB)
+      // Community line: show whichever pieces we have
       const avg = Number(bookLike.avg || existing?.avg || 0);
       const cnt = Number(bookLike.count || existing?.count || 0);
-      const communityLine = (avg && cnt)
-        ? `<p class="sub" style="margin:0 0 8px">${avg.toFixed(2)} ★ (${cnt.toLocaleString()})</p>`
-        : "";
+      const bits = [];
+      if (avg) bits.push(`${avg.toFixed(2)} ★`);
+      if (cnt) bits.push(`(${cnt.toLocaleString()})`);
+      const communityLine = bits.length ? `<p class="sub" style="margin:0 0 8px">${bits.join(" ")}</p>` : "";
 
       const body = summary
         ? `${communityLine}<p>${summary.replace(/\n{2,}/g,"<br><br>")}</p>`
@@ -577,7 +579,7 @@
       console.log("Tabs present:", !!$("#shelfTabs"));
       console.log("Shelf grid present:", !!$("#shelfGrid"));
       console.log("Search form present:", !!$("#searchForm"));
-      console.log("LLM URL set:", !!LLM_SUMMARY_URL);
+      console.log("LLM URL set:", !!llmEnabled, LLM_SUMMARY_URL);
       console.log("Last shelf:", getLastShelf());
       console.log("To Read items:", load("toRead").length);
       console.log("Reading items:", load("reading").length);
