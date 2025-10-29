@@ -2,8 +2,10 @@
   "name": "stoneware",
   "version": "1.0.0",
   "description": "",
-  "main": "test-summary.js",
+  "type": "module",
+  "main": "api/summary-gemini.js",
   "scripts": {
+    "start": "node api/summary-gemini.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -19,6 +21,7 @@
   "homepage": "https://github.com/ProjectStoneware/stoneware#readme",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "node-fetch": "^3.3.2"
